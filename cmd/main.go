@@ -62,6 +62,7 @@ func (client *VKClient) apiRequest(method string, params url.Values) []byte {
 	return body
 }
 
+// can be parallelized to create generator
 func (client *VKClient) getUserList(method string, params url.Values, count uint) []UserID {
 	res := make([]UserID, 0)
 	var v UserList
@@ -127,6 +128,7 @@ func (client *VKClient) getPostRepostsCount(post Post) int {
 	return v.Response[0].Reposts.Count
 }
 
+// can be parallelized
 func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	total := -1
 	var offset uint = 0
