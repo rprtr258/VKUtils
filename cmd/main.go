@@ -51,7 +51,9 @@ func (client *VKClient) apiRequest(method string, params url.Values) []byte {
 	req.URL.RawQuery = req_params.Encode()
 	resp, err := client.Client.Do(req)
 	if err != nil {
-		panic(err)
+		// if user hid their wall
+		log.Fatal(err)
+		return []byte{}
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -60,14 +62,15 @@ func (client *VKClient) apiRequest(method string, params url.Values) []byte {
 	return body
 }
 
-func (client *VKClient) getUserList(method string, params url.Values) []UserID {
+func (client *VKClient) getUserList(method string, params url.Values, count uint) []UserID {
 	res := make([]UserID, 0)
 	var v UserList
-	offset := 0
+	var offset uint = 0
 	total := -1
-	for {
+	countString := fmt.Sprint(count)
+	for len(res) < total || total == -1 {
 		params.Set("offset", fmt.Sprint(offset))
-		params.Set("count", fmt.Sprint(1000))
+		params.Set("count", countString)
 		body := client.apiRequest(method, params)
 		err := json.Unmarshal(body, &v)
 		if err != nil {
@@ -76,11 +79,8 @@ func (client *VKClient) getUserList(method string, params url.Values) []UserID {
 		if total == -1 {
 			total = v.Response.Count
 		}
-		if len(res) >= total {
-			break
-		}
 		res = append(res, v.Response.Items...)
-		offset += len(v.Response.Items)
+		offset += count
 	}
 	return res
 }
@@ -88,7 +88,13 @@ func (client *VKClient) getUserList(method string, params url.Values) []UserID {
 func (client *VKClient) getGroupMembers(groupID int) []UserID {
 	return client.getUserList("groups.getMembers", url.Values{
 		"group_id": []string{fmt.Sprint(groupID)},
-	})
+	}, 1000)
+}
+
+func (client *VKClient) getFriends(userID UserID) []UserID {
+	return client.getUserList("friends.get", url.Values{
+		"user_id": []string{fmt.Sprint(userID)},
+	}, 5000)
 }
 
 func (client *VKClient) getLikes(post Post) []UserID {
@@ -96,7 +102,8 @@ func (client *VKClient) getLikes(post Post) []UserID {
 		"type":     []string{"post"},
 		"owner_id": []string{fmt.Sprint(post.Owner)},
 		"item_id":  []string{fmt.Sprint(post.ID)},
-	})
+		"skip_own": []string{"0"},
+	}, 1000)
 }
 
 func (client *VKClient) getPostRepostsCount(post Post) int {
@@ -114,15 +121,20 @@ func (client *VKClient) getPostRepostsCount(post Post) int {
 	if err != nil {
 		panic(err)
 	}
+	if len(v.Response) != 1 {
+		panic("Post is hidden")
+	}
 	return v.Response[0].Reposts.Count
 }
 
 func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
-	body := client.apiRequest("wall.get", url.Values{
-		"owner_id": []string{fmt.Sprint(userID)},
-	})
+	total := -1
+	var offset uint = 0
+	const count uint = 100
+	countString, ownerIDString := fmt.Sprint(userID), fmt.Sprint(count)
 	var v struct {
 		Response struct {
+			Count int `json:"count"`
 			Items []struct {
 				CopyHistory []struct {
 					PostID  int    `json:"id"`
@@ -131,28 +143,41 @@ func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 			} `json:"items"`
 		} `json:"response"`
 	}
-	err := json.Unmarshal(body, &v)
-	if err != nil {
-		panic(err)
-	}
-	for _, item := range v.Response.Items {
-		if len(item.CopyHistory) != 0 && item.CopyHistory[0].PostID == post.ID && item.CopyHistory[0].OwnerID == post.Owner {
-			return true
+	for offset < uint(total) || total == -1 {
+		body := client.apiRequest("wall.get", url.Values{
+			"owner_id": []string{ownerIDString},
+			"offset":   []string{fmt.Sprint(offset)},
+			"count":    []string{countString},
+		})
+		err := json.Unmarshal(body, &v)
+		if err != nil {
+			panic(err)
 		}
+		if total == -1 {
+			total = v.Response.Count
+		}
+		for _, item := range v.Response.Items {
+			copyHistory := item.CopyHistory
+			if len(copyHistory) != 0 && copyHistory[0].PostID == post.ID && copyHistory[0].OwnerID == post.Owner {
+				return true
+			}
+		}
+		offset += count
 	}
 	return false
 }
 
 func getReposters(client *VKClient, postUrl string) RepostSearchResult {
 	var ownerID, postID int
-	fmt.Sscanf(postUrl, "https://vk.com/wall-%d_%d", &ownerID, &postID)
+	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerID, &postID)
 
 	post := Post{
-		Owner: UserID(-ownerID),
+		Owner: UserID(ownerID),
 		ID:    postID,
 	}
-	res := RepostSearchResult{}
-	res.TotalReposts = client.getPostRepostsCount(post)
+	res := RepostSearchResult{
+		TotalReposts: client.getPostRepostsCount(post),
+	}
 
 	wasChecked := make(map[UserID]bool)
 	toCheckQueue := make(chan UserID, 1000)
@@ -168,8 +193,15 @@ func getReposters(client *VKClient, postUrl string) RepostSearchResult {
 			}
 		}
 
-		groupMembers := client.getGroupMembers(ownerID)
-		for _, userID := range groupMembers {
+		var usersToSearch []UserID
+		if ownerID < 0 {
+			// owner is group
+			usersToSearch = client.getGroupMembers(-ownerID)
+		} else {
+			// owner is user
+			usersToSearch = client.getFriends(UserID(ownerID))
+		}
+		for _, userID := range usersToSearch {
 			if !wasChecked[userID] {
 				toCheckQueue <- userID
 				wasChecked[userID] = true
