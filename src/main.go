@@ -2,14 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
+func postRepostsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println(*r)
 	client := VKClient{
 		AccessToken: os.Getenv("VK_ACCESS_TOKEN"),
@@ -23,9 +22,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
-		panic(fmt.Sprintf("%s was not found in env vars", "VK_ACCESS_TOKEN"))
+		panic("VK_ACCESS_TOKEN was not found in env vars")
 	}
 	log.Println("Server started successfully on http://localhost:8000")
-	http.HandleFunc("/reposts", handler) // each request calls handler
+	http.HandleFunc("/reposts", postRepostsHandler)
 	log.Fatal(http.ListenAndServe("localhost:8000", nil))
 }
