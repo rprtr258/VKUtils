@@ -3,31 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"net/url"
-	"os"
-	"time"
 )
-
-type VKClient struct {
-	AccessToken string
-	Client      http.Client
-}
-
-type UserID int
 
 type Post struct {
 	Owner UserID
 	ID    int
-}
-
-type UserList struct {
-	Response struct {
-		Count int      `json:"count"`
-		Items []UserID `json:"items"`
-	} `json:"response"`
 }
 
 type RepostSearchResult struct {
@@ -36,33 +17,7 @@ type RepostSearchResult struct {
 	Reposters    []UserID `json:"reposters"`
 }
 
-func (client *VKClient) apiRequest(method string, params url.Values) []byte {
-	url := fmt.Sprintf("https://api.vk.com/method/%s", method)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		panic(err)
-	}
-	req_params := req.URL.Query()
-	req_params.Add("v", "5.131")
-	req_params.Add("access_token", client.AccessToken)
-	for k, v := range params {
-		req_params.Add(k, v[0])
-	}
-	req.URL.RawQuery = req_params.Encode()
-	resp, err := client.Client.Do(req)
-	if err != nil {
-		// if user hid their wall
-		log.Fatal(err)
-		return []byte{}
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-	return body
-}
-
-// can be parallelized to create generator
+// TODO: parallelize/create generator
 func (client *VKClient) getUserList(method string, params url.Values, count uint) []UserID {
 	res := make([]UserID, 0)
 	var v UserList
@@ -128,7 +83,7 @@ func (client *VKClient) getPostRepostsCount(post Post) int {
 	return v.Response[0].Reposts.Count
 }
 
-// can be parallelized
+// TODO: parallelize
 func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	total := -1
 	var offset uint = 0
@@ -241,25 +196,4 @@ func getReposters(client *VKClient, postUrl string) RepostSearchResult {
 	}
 
 	return res
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	log.Println(*r)
-	client := VKClient{
-		AccessToken: os.Getenv("VK_ACCESS_TOKEN"),
-	}
-	start := time.Now()
-	response := getReposters(&client, r.FormValue("postUrl"))
-	log.Printf("Time elapsed %v", time.Since(start))
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func main() {
-	if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
-		panic(fmt.Sprintf("%s was not found in env vars", "VK_ACCESS_TOKEN"))
-	}
-	log.Println("Server started successfully on http://localhost:8000")
-	http.HandleFunc("/reposts", handler) // each request calls handler
-	log.Fatal(http.ListenAndServe("localhost:8000", nil))
 }
