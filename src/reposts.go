@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sync"
 )
 
 type Post struct {
@@ -17,43 +18,49 @@ type RepostSearchResult struct {
 	Reposters    []UserID `json:"reposters"`
 }
 
-// TODO: parallelize/create generator
-func (client *VKClient) getUserList(method string, params url.Values, count uint) []UserID {
-	res := make([]UserID, 0)
-	var v UserList
-	var offset uint = 0
-	total := -1
-	countString := fmt.Sprint(count)
-	for len(res) < total || total == -1 {
-		params.Set("offset", fmt.Sprint(offset))
-		params.Set("count", countString)
-		body := client.apiRequest(method, params)
-		err := json.Unmarshal(body, &v)
-		if err != nil {
-			panic(err)
+// TODO: parallelize
+func (client *VKClient) getUserList(method string, params url.Values, count uint) <-chan UserID {
+	res := make(chan UserID)
+	go func() {
+		var v UserList
+		offset := 0
+		total := -1
+		countString := fmt.Sprint(count)
+		for offset < total || total == -1 {
+			params.Set("offset", fmt.Sprint(offset))
+			params.Set("count", countString)
+			body := client.apiRequest(method, params)
+			err := json.Unmarshal(body, &v)
+			if err != nil {
+				panic(err)
+			}
+			if total == -1 {
+				total = v.Response.Count
+			}
+			for _, userID := range v.Response.Items {
+				res <- userID
+			}
+			offset += int(count)
 		}
-		if total == -1 {
-			total = v.Response.Count
-		}
-		res = append(res, v.Response.Items...)
-		offset += count
-	}
+		close(res)
+	}()
 	return res
 }
 
-func (client *VKClient) getGroupMembers(groupID int) []UserID {
+// TODO: move client to args
+func (client *VKClient) getGroupMembers(groupID int) <-chan UserID {
 	return client.getUserList("groups.getMembers", url.Values{
 		"group_id": []string{fmt.Sprint(groupID)},
 	}, 1000)
 }
 
-func (client *VKClient) getFriends(userID UserID) []UserID {
+func (client *VKClient) getFriends(userID UserID) <-chan UserID {
 	return client.getUserList("friends.get", url.Values{
 		"user_id": []string{fmt.Sprint(userID)},
 	}, 5000)
 }
 
-func (client *VKClient) getLikes(post Post) []UserID {
+func (client *VKClient) getLikes(post Post) <-chan UserID {
 	return client.getUserList("likes.getList", url.Values{
 		"type":     []string{"post"},
 		"owner_id": []string{fmt.Sprint(post.Owner)},
@@ -124,6 +131,76 @@ func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	return false
 }
 
+func getUniqueIDs(client *VKClient, post Post, ownerID int, res *RepostSearchResult) <-chan UserID {
+	var wg sync.WaitGroup
+	userIDs := make(chan UserID)
+
+	wg.Add(1)
+	go func() {
+		likers := client.getLikes(post)
+		for userID := range likers {
+			res.Likes++
+			userIDs <- userID
+		}
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		var potentialUserIDs <-chan UserID
+		if ownerID < 0 { // owner is group
+			potentialUserIDs = client.getGroupMembers(-ownerID)
+		} else { // owner is user
+			potentialUserIDs = client.getFriends(UserID(ownerID))
+		}
+		for userID := range potentialUserIDs {
+			userIDs <- userID
+		}
+		wg.Done()
+	}()
+
+	go func() {
+		wg.Wait()
+		close(userIDs)
+	}()
+
+	wasChecked := make(map[UserID]bool)
+	toCheckQueue := make(chan UserID)
+	go func() {
+		for userID := range userIDs {
+			if !wasChecked[userID] {
+				toCheckQueue <- userID
+				wasChecked[userID] = true
+			}
+		}
+		close(toCheckQueue)
+	}()
+	return toCheckQueue
+}
+
+func getCheckedIDs(client *VKClient, post Post, ids <-chan UserID) <-chan UserID {
+	resultQueue := make(chan UserID)
+	var wg sync.WaitGroup
+	const THREADS = 1000
+	wg.Add(THREADS)
+	for i := 1; i <= THREADS; i++ {
+		go func() {
+			for userID := range ids {
+				if doesHaveRepost(client, userID, post) {
+					resultQueue <- userID
+					// TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
+				}
+			}
+			wg.Done()
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(resultQueue)
+	}()
+	return resultQueue
+}
+
 func getReposters(client *VKClient, postUrl string) RepostSearchResult {
 	var ownerID, postID int
 	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerID, &postID)
@@ -136,61 +213,10 @@ func getReposters(client *VKClient, postUrl string) RepostSearchResult {
 		TotalReposts: client.getPostRepostsCount(post),
 	}
 
-	wasChecked := make(map[UserID]bool)
-	toCheckQueue := make(chan UserID, 1000)
-	resultQueue := make(chan UserID, 100)
-
-	go func() {
-		likers := client.getLikes(post)
-		res.Likes = len(likers)
-		for _, userID := range likers {
-			if !wasChecked[userID] {
-				toCheckQueue <- userID
-				wasChecked[userID] = true
-			}
-		}
-
-		var usersToSearch []UserID
-		if ownerID < 0 {
-			// owner is group
-			usersToSearch = client.getGroupMembers(-ownerID)
-		} else {
-			// owner is user
-			usersToSearch = client.getFriends(UserID(ownerID))
-		}
-		for _, userID := range usersToSearch {
-			if !wasChecked[userID] {
-				toCheckQueue <- userID
-				wasChecked[userID] = true
-			}
-		}
-		close(toCheckQueue)
-	}()
-
-	done := make(chan bool)
-	doneAll := make(chan bool)
-	const THREADS = 1000
-	for i := 1; i <= THREADS; i++ {
-		go func() {
-			for userID := range toCheckQueue {
-				if doesHaveRepost(client, userID, post) {
-					resultQueue <- userID
-					// TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
-				}
-			}
-			done <- true
-		}()
-	}
-	go func() {
-		for i := 1; i <= THREADS; i++ {
-			<-done
-		}
-		close(resultQueue)
-		doneAll <- true
-	}()
+	uniqueIDs := getUniqueIDs(client, post, ownerID, &res)
+	resultQueue := getCheckedIDs(client, post, uniqueIDs)
 
 	res.Reposters = make([]UserID, 0)
-	<-doneAll
 	for userID := range resultQueue {
 		res.Reposters = append(res.Reposters, userID)
 	}
