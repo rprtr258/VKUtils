@@ -111,12 +111,39 @@ func (client *VKClient) getPostRepostsCount(post Post) int {
 	return v.Response[0].Reposts.Count
 }
 
+// // TODO: parallelize
+// func getPostsCount(client *VKClient, userID UserID) uint {
+// 	const count uint = 100
+// 	countString, ownerIDString := fmt.Sprint(userID), fmt.Sprint(count)
+// 	var v struct {
+// 		Response struct {
+// 			Count int `json:"count"`
+// 			Items []struct {
+// 				CopyHistory []struct {
+// 					PostID  int    `json:"id"`
+// 					OwnerID UserID `json:"owner_id"`
+// 				} `json:"copy_history"`
+// 			} `json:"items"`
+// 		} `json:"response"`
+// 	}
+// 	body := client.apiRequest("wall.get", url.Values{
+// 		"owner_id": []string{ownerIDString},
+// 		"offset":   []string{"0"},
+// 		"count":    []string{"0"},
+// 	})
+// 	err := json.Unmarshal(body, &v)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return v.Response.Count
+// }
+
 // TODO: parallelize
 func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	total := -1
 	var offset uint = 0
 	const count uint = 100
-	countString, ownerIDString := fmt.Sprint(userID), fmt.Sprint(count)
+	countString, ownerIDString := fmt.Sprint(count), fmt.Sprint(userID)
 	var v struct {
 		Response struct {
 			Count int `json:"count"`
@@ -202,7 +229,7 @@ func getUniqueIDs(client *VKClient, post Post, ownerID int, res *RepostSearchRes
 func getCheckedIDs(client *VKClient, post Post, ids <-chan UserID) <-chan UserID {
 	resultQueue := make(chan UserID)
 	var wg sync.WaitGroup
-	const THREADS = 1000
+	const THREADS = 100
 	wg.Add(THREADS)
 	for i := 1; i <= THREADS; i++ {
 		go func() {
