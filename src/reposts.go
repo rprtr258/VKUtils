@@ -39,8 +39,9 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 		var wg sync.WaitGroup
 		const THREADS = 10
 		wg.Add(THREADS)
+		STEP := count * THREADS
 		for i := uint(0); i < THREADS; i++ {
-			go func(start, step uint) {
+			go func(start uint) {
 				urlParams := make(url.Values)
 				for k, v := range params {
 					urlParams[k] = v
@@ -58,10 +59,10 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 					for _, userID := range v.Response.Items {
 						res <- userID
 					}
-					offset += step
+					offset += STEP
 				}
 				wg.Done()
-			}(count*i, count*THREADS)
+			}(count * i)
 		}
 		wg.Wait()
 		close(res)
@@ -146,7 +147,6 @@ type Repost struct {
 	} `json:"response"`
 }
 
-// TODO: parallelize
 func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	const (
 		FOUND     = true  // repost found
