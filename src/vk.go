@@ -12,7 +12,7 @@ type UserID int
 
 type UserList struct {
 	Response struct {
-		Count int      `json:"count"`
+		Count uint     `json:"count"`
 		Items []UserID `json:"items"`
 	} `json:"response"`
 }

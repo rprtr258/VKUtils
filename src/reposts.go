@@ -18,30 +18,51 @@ type RepostSearchResult struct {
 	Reposters    []UserID `json:"reposters"`
 }
 
-// TODO: parallelize
+func (client *VKClient) getTotalUsers(method string, params url.Values) uint {
+	var v UserList
+	params.Set("offset", "0")
+	params.Set("count", "0")
+	body := client.apiRequest(method, params)
+	err := json.Unmarshal(body, &v)
+	if err != nil {
+		panic(err)
+	}
+	return v.Response.Count
+}
+
 func (client *VKClient) getUserList(method string, params url.Values, count uint) <-chan UserID {
 	res := make(chan UserID)
 	go func() {
-		var v UserList
-		offset := 0
-		total := -1
+		total := client.getTotalUsers(method, params)
 		countString := fmt.Sprint(count)
-		for offset < total || total == -1 {
-			params.Set("offset", fmt.Sprint(offset))
-			params.Set("count", countString)
-			body := client.apiRequest(method, params)
-			err := json.Unmarshal(body, &v)
-			if err != nil {
-				panic(err)
-			}
-			if total == -1 {
-				total = v.Response.Count
-			}
-			for _, userID := range v.Response.Items {
-				res <- userID
-			}
-			offset += int(count)
+		var wg sync.WaitGroup
+		const THREADS = 10
+		wg.Add(THREADS)
+		for i := uint(0); i < THREADS; i++ {
+			go func(start, step uint) {
+				urlParams := make(url.Values)
+				for k, v := range params {
+					urlParams[k] = v
+				}
+				offset := start
+				for offset < total {
+					var v UserList
+					urlParams.Set("offset", fmt.Sprint(offset))
+					urlParams.Set("count", countString)
+					body := client.apiRequest(method, urlParams)
+					err := json.Unmarshal(body, &v)
+					if err != nil {
+						panic(err)
+					}
+					for _, userID := range v.Response.Items {
+						res <- userID
+					}
+					offset += step
+				}
+				wg.Done()
+			}(count*i, count*THREADS)
 		}
+		wg.Wait()
 		close(res)
 	}()
 	return res
