@@ -10,6 +10,7 @@ import (
 type Post struct {
 	Owner UserID
 	ID    int
+	date  uint
 }
 
 type RepostSearchResult struct {
@@ -90,12 +91,13 @@ func (client *VKClient) getLikes(post Post) <-chan UserID {
 	}, 1000)
 }
 
-func (client *VKClient) getPostRepostsCount(post Post) int {
+func (client *VKClient) getPostRepostsCount(post *Post) int {
 	body := client.apiRequest("wall.getById", url.Values{
 		"posts": []string{fmt.Sprintf("%d_%d", post.Owner, post.ID)},
 	})
 	var v struct {
 		Response []struct {
+			Date    uint `json:"date"`
 			Reposts struct {
 				Count int `json:"count"`
 			} `json:"reposts"`
@@ -108,54 +110,74 @@ func (client *VKClient) getPostRepostsCount(post Post) int {
 	if len(v.Response) != 1 {
 		panic("Post is hidden")
 	}
+	post.date = v.Response[0].Date
 	return v.Response[0].Reposts.Count
 }
 
-// // TODO: parallelize
-// func getPostsCount(client *VKClient, userID UserID) uint {
-// 	const count uint = 100
-// 	countString, ownerIDString := fmt.Sprint(userID), fmt.Sprint(count)
-// 	var v struct {
-// 		Response struct {
-// 			Count int `json:"count"`
-// 			Items []struct {
-// 				CopyHistory []struct {
-// 					PostID  int    `json:"id"`
-// 					OwnerID UserID `json:"owner_id"`
-// 				} `json:"copy_history"`
-// 			} `json:"items"`
-// 		} `json:"response"`
-// 	}
-// 	body := client.apiRequest("wall.get", url.Values{
-// 		"owner_id": []string{ownerIDString},
-// 		"offset":   []string{"0"},
-// 		"count":    []string{"0"},
-// 	})
-// 	err := json.Unmarshal(body, &v)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	return v.Response.Count
-// }
+func getPostsCount(client *VKClient, userID UserID) uint {
+	ownerIDString := fmt.Sprint(userID)
+	var v struct {
+		Response struct {
+			Count uint `json:"count"`
+		} `json:"response"`
+	}
+	body := client.apiRequest("wall.get", url.Values{
+		"owner_id": []string{ownerIDString},
+		"offset":   []string{"0"},
+		"count":    []string{"0"},
+	})
+	err := json.Unmarshal(body, &v)
+	if err != nil {
+		panic(err)
+	}
+	return v.Response.Count
+}
+
+type Repost struct {
+	Response struct {
+		Count int `json:"count"`
+		Items []struct {
+			Date        uint `json:"date"`
+			CopyHistory []struct {
+				PostID  int    `json:"id"`
+				OwnerID UserID `json:"owner_id"`
+			} `json:"copy_history"`
+		} `json:"items"`
+	} `json:"response"`
+}
 
 // TODO: parallelize
 func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
-	total := -1
-	var offset uint = 0
-	const count uint = 100
-	countString, ownerIDString := fmt.Sprint(count), fmt.Sprint(userID)
-	var v struct {
-		Response struct {
-			Count int `json:"count"`
-			Items []struct {
-				CopyHistory []struct {
-					PostID  int    `json:"id"`
-					OwnerID UserID `json:"owner_id"`
-				} `json:"copy_history"`
-			} `json:"items"`
-		} `json:"response"`
+	const (
+		FOUND     = true  // repost found
+		NOT_FOUND = false // scanned all posts, not found repost
+	)
+	total := getPostsCount(client, userID)
+	if total == 0 {
+		return NOT_FOUND
 	}
-	for offset < uint(total) || total == -1 {
+	// check first/pinned post
+	ownerIDString := fmt.Sprint(userID)
+	var v Repost
+	body := client.apiRequest("wall.get", url.Values{
+		"owner_id": []string{ownerIDString},
+		"offset":   []string{"0"},
+		"count":    []string{"1"},
+	})
+	err := json.Unmarshal(body, &v)
+	if err != nil {
+		panic(err)
+	}
+	copyHistory := v.Response.Items[0].CopyHistory
+	if len(copyHistory) != 0 && copyHistory[0].PostID == post.ID && copyHistory[0].OwnerID == post.Owner {
+		return FOUND
+	}
+	// check remaining posts
+	var offset uint = 1
+	const COUNT uint = 100
+	countString := fmt.Sprint(COUNT)
+	for offset < total {
+		var v Repost
 		body := client.apiRequest("wall.get", url.Values{
 			"owner_id": []string{ownerIDString},
 			"offset":   []string{fmt.Sprint(offset)},
@@ -165,18 +187,18 @@ func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 		if err != nil {
 			panic(err)
 		}
-		if total == -1 {
-			total = v.Response.Count
-		}
 		for _, item := range v.Response.Items {
+			if item.Date < post.date {
+				return NOT_FOUND
+			}
 			copyHistory := item.CopyHistory
 			if len(copyHistory) != 0 && copyHistory[0].PostID == post.ID && copyHistory[0].OwnerID == post.Owner {
-				return true
+				return FOUND
 			}
 		}
-		offset += count
+		offset += COUNT
 	}
-	return false
+	return NOT_FOUND
 }
 
 func getUniqueIDs(client *VKClient, post Post, ownerID int, res *RepostSearchResult) <-chan UserID {
@@ -257,8 +279,10 @@ func getReposters(client *VKClient, postUrl string) RepostSearchResult {
 		Owner: UserID(ownerID),
 		ID:    postID,
 	}
+	// TODO: separate modification of post and creation of result
+	totalReposts := client.getPostRepostsCount(&post)
 	res := RepostSearchResult{
-		TotalReposts: client.getPostRepostsCount(post),
+		TotalReposts: totalReposts,
 	}
 
 	uniqueIDs := getUniqueIDs(client, post, ownerID, &res)

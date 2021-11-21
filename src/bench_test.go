@@ -4,23 +4,23 @@ package main
 // "os"
 // "testing"
 
-func areEqualRepostSearchResult(a, b RepostSearchResult) bool {
-	if a.Likes != b.Likes {
-		return false
-	}
-	if a.TotalReposts != b.TotalReposts {
-		return false
-	}
-	if len(a.Reposters) != len(b.Reposters) {
-		return false
-	}
-	for i := range a.Reposters {
-		if a.Reposters[i] != b.Reposters[i] {
-			return false
-		}
-	}
-	return true
-}
+// func areEqualRepostSearchResult(a, b RepostSearchResult) bool {
+// 	if a.Likes != b.Likes {
+// 		return false
+// 	}
+// 	if a.TotalReposts != b.TotalReposts {
+// 		return false
+// 	}
+// 	if len(a.Reposters) != len(b.Reposters) {
+// 		return false
+// 	}
+// 	for i := range a.Reposters {
+// 		if a.Reposters[i] != b.Reposters[i] {
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }
 
 // TODO: fix/remove benchmark
 // func BenchmarkSample(b *testing.B) {
