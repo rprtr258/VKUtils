@@ -6,8 +6,8 @@ tasks:
   run:
     dir: src
     cmds:
-      - go run main.go vk.go reposts.go
+      - go run *.go
   bench:
-    dir: src
+    dir: tests
     cmds:
       - go test -bench=.

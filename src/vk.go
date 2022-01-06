@@ -17,6 +17,13 @@ type UserList struct {
 	} `json:"response"`
 }
 
+type Post struct {
+	Owner UserID `json:"owner_id"`
+	ID    int    `json:"id"`
+	Date  uint   `json:"date"`
+	Text  string `json:"text"`
+}
+
 type VKClient struct {
 	AccessToken string
 	Client      http.Client
@@ -35,6 +42,7 @@ func (client *VKClient) apiRequest(method string, params url.Values) []byte {
 		req_params.Add(k, v[0])
 	}
 	req.URL.RawQuery = req_params.Encode()
+	fmt.Println(req)
 	resp, err := client.Client.Do(req)
 	if err != nil {
 		// if user hid their wall

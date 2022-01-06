@@ -7,12 +7,6 @@ import (
 	"sync"
 )
 
-type Post struct {
-	Owner UserID
-	ID    int
-	date  uint
-}
-
 type RepostSearchResult struct {
 	Likes        int      `json:"likes"`
 	TotalReposts int      `json:"totalReposts"`
@@ -111,7 +105,7 @@ func (client *VKClient) getPostRepostsCount(post *Post) int {
 	if len(v.Response) != 1 {
 		panic("Post is hidden")
 	}
-	post.date = v.Response[0].Date
+	post.Date = v.Response[0].Date
 	return v.Response[0].Reposts.Count
 }
 
@@ -125,7 +119,7 @@ func getPostsCount(client *VKClient, userID UserID) uint {
 	body := client.apiRequest("wall.get", url.Values{
 		"owner_id": []string{ownerIDString},
 		"offset":   []string{"0"},
-		"count":    []string{"0"},
+		"count":    []string{"1"},
 	})
 	err := json.Unmarshal(body, &v)
 	if err != nil {
@@ -168,6 +162,7 @@ func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println(userID, total, post, v)
 	copyHistory := v.Response.Items[0].CopyHistory
 	if len(copyHistory) != 0 && copyHistory[0].PostID == post.ID && copyHistory[0].OwnerID == post.Owner {
 		return FOUND
@@ -188,7 +183,7 @@ func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 			panic(err)
 		}
 		for _, item := range v.Response.Items {
-			if item.Date < post.date {
+			if item.Date < post.Date {
 				return NOT_FOUND
 			}
 			copyHistory := item.CopyHistory
