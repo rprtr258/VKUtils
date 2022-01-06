@@ -34,7 +34,7 @@ func main() {
 	// TODO: fix
 	http.HandleFunc("/reposts", handlerMiddleware(
 		func(client *VKClient, r *http.Request) Any {
-			return getReposters(client, r.FormValue("postUrl"))
+			return getRepostersByPostUrl(client, r.FormValue("postUrl"))
 		},
 	))
 

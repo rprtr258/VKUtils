@@ -257,26 +257,25 @@ func getCheckedIDs(client *VKClient, post Post, ids <-chan UserID) <-chan UserID
 	return resultQueue
 }
 
-func getReposters(client *VKClient, postUrl string) []UserID {
-	var ownerID UserID
-	var postID uint
-	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerID, &postID)
-
+func getSharers(client *VKClient, ownerId UserID, postId uint) <-chan UserID {
 	// TODO: expand to two vars/change to simpler structure
 	post := Post{
-		Owner: ownerID,
-		ID:    postID,
+		Owner: ownerId,
+		ID:    postId,
 	}
 	// TODO: separate modification of post and creation of result
 	post.Date = client.getPostTime(post)
+	uniqueIDs := getUniqueIDs(client, ownerId, postId)
+	return getCheckedIDs(client, post, uniqueIDs)
+}
+
+func getRepostersByPostUrl(client *VKClient, postUrl string) []UserID {
+	var ownerId UserID
+	var postId uint
+	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerId, &postId)
 	res := make([]UserID, 0)
-
-	uniqueIDs := getUniqueIDs(client, ownerID, postID)
-	resultQueue := getCheckedIDs(client, post, uniqueIDs)
-
-	for userID := range resultQueue {
+	for userID := range getSharers(client, ownerId, postId) {
 		res = append(res, userID)
 	}
-
 	return res
 }

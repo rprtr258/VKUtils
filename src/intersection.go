@@ -57,7 +57,7 @@ func getIntersection(client *VKClient, data *json.Decoder) []UserID {
 		Friends      []ProfileSet `json:"friends"`
 		Followers    []ProfileSet `json:"followers"`
 		Likers       []PostSet    `json:"likers"`
-		// Sharers      PostSet    `json:"sharers"` // TODO: implement
+		Sharers      []PostSet    `json:"sharers"` // TODO: check inexactly
 		// TODO: user provided
 	}
 
@@ -70,23 +70,27 @@ func getIntersection(client *VKClient, data *json.Decoder) []UserID {
 	// TODO: rewrite to channels
 	// TODO: parallelize
 	toExclude := make(UserSet)
+	inserters := make(
+		[]func() <-chan UserID,
+		len(v.Exclude.GroupMembers)+len(v.Include.Friends)+len(v.Include.Followers)+len(v.Exclude.Likers)+len(v.Exclude.Likers),
+	)
 	for _, groupSet := range v.Exclude.GroupMembers {
-		for userId := range client.getGroupMembers(groupSet.GroupId) {
-			toExclude[userId] = true
-		}
+		inserters = append(inserters, func() <-chan UserID { return client.getGroupMembers(groupSet.GroupId) })
 	}
 	for _, profileSet := range v.Exclude.Friends {
-		for userId := range client.getFriends(profileSet.UserId) {
-			toExclude[userId] = true
-		}
+		inserters = append(inserters, func() <-chan UserID { return client.getFriends(profileSet.UserId) })
 	}
 	for _, profileSet := range v.Exclude.Followers {
-		for userId := range getFollowers(client, profileSet.UserId) {
-			toExclude[userId] = true
-		}
+		inserters = append(inserters, func() <-chan UserID { return getFollowers(client, profileSet.UserId) })
 	}
 	for _, postSet := range v.Exclude.Likers {
-		for userId := range client.getLikes(postSet.OwnerId, postSet.PostId) {
+		inserters = append(inserters, func() <-chan UserID { return client.getLikes(postSet.OwnerId, postSet.PostId) })
+	}
+	for _, postSet := range v.Exclude.Sharers {
+		inserters = append(inserters, func() <-chan UserID { return getSharers(client, postSet.OwnerId, postSet.PostId) })
+	}
+	for _, f := range inserters {
+		for userId := range f() {
 			toExclude[userId] = true
 		}
 	}
@@ -96,24 +100,26 @@ func getIntersection(client *VKClient, data *json.Decoder) []UserID {
 		groupMembersChans = append(groupMembersChans, client.getGroupMembers(groupSet.GroupId))
 	}
 	groupMembersIntersection := intersectChans(groupMembersChans)
-
 	friendsChans := make([]<-chan UserID, 0)
 	for _, profileSet := range v.Include.Friends {
 		friendsChans = append(friendsChans, client.getFriends(profileSet.UserId))
 	}
 	friendsIntersection := intersectChans(friendsChans)
-
 	followersChans := make([]<-chan UserID, 0)
 	for _, profileSet := range v.Include.Followers {
 		followersChans = append(followersChans, getFollowers(client, profileSet.UserId))
 	}
 	followersIntersection := intersectChans(followersChans)
-
 	likersChans := make([]<-chan UserID, 0)
 	for _, postSet := range v.Include.Likers {
 		likersChans = append(likersChans, client.getLikes(postSet.OwnerId, postSet.PostId))
 	}
 	likersIntersection := intersectChans(likersChans)
+	sharersChans := make([]<-chan UserID, 0)
+	for _, postSet := range v.Include.Sharers {
+		sharersChans = append(sharersChans, getSharers(client, postSet.OwnerId, postSet.PostId))
+	}
+	sharersIntersection := intersectChans(sharersChans)
 
 	res := make([]UserID, 0)
 	// TODO: differentiate between empty map and empty intersection
@@ -125,7 +131,8 @@ func getIntersection(client *VKClient, data *json.Decoder) []UserID {
 			// (len(groupMembersIntersection) == 0 || contains(userId, groupMembersIntersection)) &&
 			(len(friendsIntersection) == 0 || contains(userId, friendsIntersection)) &&
 			(len(followersIntersection) == 0 || contains(userId, followersIntersection)) &&
-			(len(likersIntersection) == 0 || contains(userId, likersIntersection)) {
+			(len(likersIntersection) == 0 || contains(userId, likersIntersection) &&
+				(len(sharersIntersection) == 0 || contains(userId, sharersIntersection))) {
 			res = append(res, userId)
 		}
 	}
