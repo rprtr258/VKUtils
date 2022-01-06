@@ -7,12 +7,6 @@ import (
 	"sync"
 )
 
-type RepostSearchResult struct {
-	Likes        int      `json:"likes"`
-	TotalReposts int      `json:"totalReposts"`
-	Reposters    []UserID `json:"reposters"`
-}
-
 func (client *VKClient) getTotalUsers(method string, params url.Values) uint {
 	var v UserList
 	params.Set("offset", "0")
@@ -86,7 +80,7 @@ func (client *VKClient) getLikes(ownerId UserID, postId uint) <-chan UserID {
 	}, 1000)
 }
 
-func (client *VKClient) getPostRepostsCount(post *Post) int {
+func (client *VKClient) getPostTime(post Post) uint {
 	body := client.apiRequest("wall.getById", url.Values{
 		"posts": []string{fmt.Sprintf("%d_%d", post.Owner, post.ID)},
 	})
@@ -105,8 +99,7 @@ func (client *VKClient) getPostRepostsCount(post *Post) int {
 	if len(v.Response) != 1 {
 		panic("Post is hidden")
 	}
-	post.Date = v.Response[0].Date
-	return v.Response[0].Reposts.Count
+	return v.Response[0].Date
 }
 
 func getPostsCount(client *VKClient, userID UserID) uint {
@@ -195,15 +188,14 @@ func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	return NOT_FOUND
 }
 
-func getUniqueIDs(client *VKClient, post Post, ownerID UserID, res *RepostSearchResult) <-chan UserID {
+func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) <-chan UserID {
 	var wg sync.WaitGroup
 	userIDs := make(chan UserID)
 
 	wg.Add(1)
 	go func() {
-		likers := client.getLikes(post.Owner, post.ID)
+		likers := client.getLikes(ownerID, postID)
 		for userID := range likers {
-			res.Likes++
 			userIDs <- userID
 		}
 		wg.Done()
@@ -265,27 +257,25 @@ func getCheckedIDs(client *VKClient, post Post, ids <-chan UserID) <-chan UserID
 	return resultQueue
 }
 
-func getReposters(client *VKClient, postUrl string) RepostSearchResult {
+func getReposters(client *VKClient, postUrl string) []UserID {
 	var ownerID UserID
 	var postID uint
 	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerID, &postID)
 
+	// TODO: expand to two vars/change to simpler structure
 	post := Post{
-		Owner: UserID(ownerID),
+		Owner: ownerID,
 		ID:    postID,
 	}
 	// TODO: separate modification of post and creation of result
-	totalReposts := client.getPostRepostsCount(&post)
-	res := RepostSearchResult{
-		TotalReposts: totalReposts,
-	}
+	post.Date = client.getPostTime(post)
+	res := make([]UserID, 0)
 
-	uniqueIDs := getUniqueIDs(client, post, ownerID, &res)
+	uniqueIDs := getUniqueIDs(client, ownerID, postID)
 	resultQueue := getCheckedIDs(client, post, uniqueIDs)
 
-	res.Reposters = make([]UserID, 0)
 	for userID := range resultQueue {
-		res.Reposters = append(res.Reposters, userID)
+		res = append(res, userID)
 	}
 
 	return res
