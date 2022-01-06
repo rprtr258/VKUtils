@@ -29,7 +29,7 @@ func main() {
 	if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
 		panic("VK_ACCESS_TOKEN was not found in env vars")
 	}
-	log.Println("Server started successfully on http://localhost:8000")
+	log.Println("Starting server on http://localhost:8000")
 
 	// TODO: fix
 	http.HandleFunc("/reposts", handlerMiddleware(
@@ -45,6 +45,12 @@ func main() {
 	http.HandleFunc("/rev_posts", handlerMiddleware(
 		func(client *VKClient, r *http.Request) Any {
 			return getReversedPosts(client, r.FormValue("groupUrl"))
+		},
+	))
+
+	http.HandleFunc("/intersection", handlerMiddleware(
+		func(client *VKClient, r *http.Request) Any {
+			return getIntersection(client, json.NewDecoder(r.Body))
 		},
 	))
 

@@ -41,7 +41,7 @@ func getReversedPosts(client *VKClient, groupUrl string) ReversePostsResult {
 	var w struct {
 		Response struct {
 			Items []struct {
-				Id      int    `json:"id"`
+				Id      uint   `json:"id"`
 				OwnerId UserID `json:"owner_id"`
 				Text    string `json:"text"`
 				Date    uint   `json:"date"`

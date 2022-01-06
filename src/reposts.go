@@ -16,7 +16,7 @@ type RepostSearchResult struct {
 func (client *VKClient) getTotalUsers(method string, params url.Values) uint {
 	var v UserList
 	params.Set("offset", "0")
-	params.Set("count", "0")
+	params.Set("count", "1")
 	body := client.apiRequest(method, params)
 	err := json.Unmarshal(body, &v)
 	if err != nil {
@@ -65,9 +65,9 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 }
 
 // TODO: move client to args
-func (client *VKClient) getGroupMembers(groupID int) <-chan UserID {
+func (client *VKClient) getGroupMembers(groupID UserID) <-chan UserID {
 	return client.getUserList("groups.getMembers", url.Values{
-		"group_id": []string{fmt.Sprint(groupID)},
+		"group_id": []string{fmt.Sprint(-groupID)},
 	}, 1000)
 }
 
@@ -77,11 +77,11 @@ func (client *VKClient) getFriends(userID UserID) <-chan UserID {
 	}, 5000)
 }
 
-func (client *VKClient) getLikes(post Post) <-chan UserID {
+func (client *VKClient) getLikes(ownerId UserID, postId uint) <-chan UserID {
 	return client.getUserList("likes.getList", url.Values{
 		"type":     []string{"post"},
-		"owner_id": []string{fmt.Sprint(post.Owner)},
-		"item_id":  []string{fmt.Sprint(post.ID)},
+		"owner_id": []string{fmt.Sprint(ownerId)},
+		"item_id":  []string{fmt.Sprint(postId)},
 		"skip_own": []string{"0"},
 	}, 1000)
 }
@@ -134,7 +134,7 @@ type Repost struct {
 		Items []struct {
 			Date        uint `json:"date"`
 			CopyHistory []struct {
-				PostID  int    `json:"id"`
+				PostID  uint   `json:"id"`
 				OwnerID UserID `json:"owner_id"`
 			} `json:"copy_history"`
 		} `json:"items"`
@@ -162,7 +162,6 @@ func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(userID, total, post, v)
 	copyHistory := v.Response.Items[0].CopyHistory
 	if len(copyHistory) != 0 && copyHistory[0].PostID == post.ID && copyHistory[0].OwnerID == post.Owner {
 		return FOUND
@@ -196,13 +195,13 @@ func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
 	return NOT_FOUND
 }
 
-func getUniqueIDs(client *VKClient, post Post, ownerID int, res *RepostSearchResult) <-chan UserID {
+func getUniqueIDs(client *VKClient, post Post, ownerID UserID, res *RepostSearchResult) <-chan UserID {
 	var wg sync.WaitGroup
 	userIDs := make(chan UserID)
 
 	wg.Add(1)
 	go func() {
-		likers := client.getLikes(post)
+		likers := client.getLikes(post.Owner, post.ID)
 		for userID := range likers {
 			res.Likes++
 			userIDs <- userID
@@ -214,7 +213,7 @@ func getUniqueIDs(client *VKClient, post Post, ownerID int, res *RepostSearchRes
 	go func() {
 		var potentialUserIDs <-chan UserID
 		if ownerID < 0 { // owner is group
-			potentialUserIDs = client.getGroupMembers(-ownerID)
+			potentialUserIDs = client.getGroupMembers(ownerID)
 		} else { // owner is user
 			potentialUserIDs = client.getFriends(UserID(ownerID))
 		}
@@ -267,7 +266,8 @@ func getCheckedIDs(client *VKClient, post Post, ids <-chan UserID) <-chan UserID
 }
 
 func getReposters(client *VKClient, postUrl string) RepostSearchResult {
-	var ownerID, postID int
+	var ownerID UserID
+	var postID uint
 	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerID, &postID)
 
 	post := Post{
