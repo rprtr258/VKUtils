@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -55,7 +54,6 @@ func (client *VKClient) apiRequest(method string, params url.Values) (res []byte
 	var resp *http.Response
 	var body []byte
 	for timeLimitTries < TIME_LIMIT_TRIES_LIMIT {
-		log.Printf("%s(%v)", method, params)
 		resp, err = client.Client.Do(req)
 		if err != nil {
 			// if user hid their wall
