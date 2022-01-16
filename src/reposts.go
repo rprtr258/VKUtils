@@ -229,6 +229,7 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) (<-chan UserID,
 	users := make(chan UserID)
 	errors := make(chan error)
 
+	// TODO: add commenters?
 	wg.Add(1)
 	go func() {
 		likers, errorsLikers := client.getLikes(ownerID, postID)
@@ -239,19 +240,21 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) (<-chan UserID,
 		wg.Done()
 	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	var potentialUserIDs <-chan UserOrErr
-	// 	if ownerID < 0 { // owner is group
-	// 		potentialUserIDs = client.getGroupMembers(ownerID)
-	// 	} else { // owner is user
-	// 		potentialUserIDs = client.getFriends(UserID(ownerID))
-	// 	}
-	// 	for userID := range potentialUserIDs {
-	// 		usersChan <- userID
-	// 	}
-	// 	wg.Done()
-	// }()
+	wg.Add(1)
+	go func() {
+		var potentialUserIDs <-chan UserID
+		var errorsUsers <-chan error
+		if ownerID < 0 { // owner is group
+			potentialUserIDs, errorsUsers = client.getGroupMembers(ownerID)
+		} else { // owner is user
+			potentialUserIDs, errorsUsers = client.getFriends(UserID(ownerID))
+		}
+		go drainErrorChan(errors, errorsUsers)
+		for userID := range potentialUserIDs {
+			users <- userID
+		}
+		wg.Done()
+	}()
 
 	go func() {
 		wg.Wait()
