@@ -35,11 +35,13 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 	go func() {
 		defer func() {
 			close(users)
-			close(errors)
 		}()
 		total, err := client.getTotalUsers(method, params) // TODO: remove
 		if err != nil {
-			go func(err error) { errors <- err }(err)
+			go func(err error) {
+				errors <- err
+				close(errors)
+			}(err)
 			return
 		}
 		countString := fmt.Sprint(count)
@@ -60,12 +62,18 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 					urlParams.Set("count", countString)
 					body, err := client.apiRequest(method, urlParams)
 					if err != nil {
-						go func(err error) { errors <- err }(err)
+						go func(err error) {
+							errors <- err
+							close(errors)
+						}(err)
 						return
 					}
 					err = json.Unmarshal(body, &v)
 					if err != nil {
-						go func(err error) { errors <- err }(err)
+						go func(err error) {
+							errors <- err
+							close(errors)
+						}(err)
 						return
 					} else {
 						for _, userID := range v.Response.Items {
@@ -78,6 +86,7 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 			}(count * i)
 		}
 		wg.Wait()
+		close(errors)
 	}()
 	return users, errors
 }
@@ -240,6 +249,7 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) (<-chan UserID,
 		wg.Done()
 	}()
 
+	// TODO: "Error(15) Access denied: group hide members"
 	wg.Add(1)
 	go func() {
 		var potentialUserIDs <-chan UserID
