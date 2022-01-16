@@ -44,7 +44,11 @@ func main() {
 	// https://vk.com/wall-2158488_651604
 	http.HandleFunc("/rev_posts", handlerMiddleware(
 		func(client *VKClient, r *http.Request) Any {
-			return getReversedPosts(client, r.FormValue("groupUrl"))
+			res, err := getReversedPosts(client, r.FormValue("groupUrl"))
+			if err != nil {
+				return err
+			}
+			return res
 		},
 	))
 

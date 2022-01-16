@@ -8,7 +8,7 @@ import (
 
 type UserSet map[UserID]bool
 
-func getFollowers(client *VKClient, userId UserID) <-chan UserID {
+func getFollowers(client *VKClient, userId UserID) (<-chan UserID, <-chan error) {
 	return client.getUserList("users.getFollowers", url.Values{
 		"user_id": []string{fmt.Sprint(userId)},
 	}, 1000)
@@ -25,13 +25,13 @@ func intersectChans(chans []<-chan UserID) UserSet {
 	if chansCount == 0 {
 		return res
 	}
-	for userId := range chans[0] {
-		res[userId] = true
+	for userID := range chans[0] {
+		res[userID] = true
 	}
 	for i := 1; i < chansCount; i++ {
-		for userId := range chans[i] {
-			if !contains(userId, res) {
-				res[userId] = false
+		for userID := range chans[i] {
+			if !contains(userID, res) {
+				res[userID] = false
 			}
 		}
 	}
@@ -71,55 +71,62 @@ func getIntersection(client *VKClient, data *json.Decoder) []UserID {
 	// TODO: parallelize
 	toExclude := make(UserSet)
 	inserters := make(
-		[]func() <-chan UserID,
+		[]func() (<-chan UserID, <-chan error),
 		len(v.Exclude.GroupMembers)+len(v.Include.Friends)+len(v.Include.Followers)+len(v.Exclude.Likers)+len(v.Exclude.Likers),
 	)
 	for _, groupSet := range v.Exclude.GroupMembers {
-		inserters = append(inserters, func() <-chan UserID { return client.getGroupMembers(groupSet.GroupId) })
+		inserters = append(inserters, func() (<-chan UserID, <-chan error) { return client.getGroupMembers(groupSet.GroupId) })
 	}
 	for _, profileSet := range v.Exclude.Friends {
-		inserters = append(inserters, func() <-chan UserID { return client.getFriends(profileSet.UserId) })
+		inserters = append(inserters, func() (<-chan UserID, <-chan error) { return client.getFriends(profileSet.UserId) })
 	}
 	for _, profileSet := range v.Exclude.Followers {
-		inserters = append(inserters, func() <-chan UserID { return getFollowers(client, profileSet.UserId) })
+		inserters = append(inserters, func() (<-chan UserID, <-chan error) { return getFollowers(client, profileSet.UserId) })
 	}
 	for _, postSet := range v.Exclude.Likers {
-		inserters = append(inserters, func() <-chan UserID { return client.getLikes(postSet.OwnerId, postSet.PostId) })
+		inserters = append(inserters, func() (<-chan UserID, <-chan error) { return client.getLikes(postSet.OwnerId, postSet.PostId) })
 	}
 	for _, postSet := range v.Exclude.Sharers {
-		inserters = append(inserters, func() <-chan UserID { return getSharers(client, postSet.OwnerId, postSet.PostId) })
+		inserters = append(inserters, func() (<-chan UserID, <-chan error) { return getSharers(client, postSet.OwnerId, postSet.PostId) })
 	}
+	errors := make(chan error)
 	for _, f := range inserters {
-		for userId := range f() {
-			toExclude[userId] = true
+		userIDs, errorsInserting := f()
+		drainErrorChan(errors, errorsInserting)
+		for userID := range userIDs {
+			toExclude[userID] = true
 		}
 	}
 
 	groupMembersChans := make([]<-chan UserID, 0)
 	for _, groupSet := range v.Include.GroupMembers {
-		groupMembersChans = append(groupMembersChans, client.getGroupMembers(groupSet.GroupId))
+		groupMembers, errorsGroupMembers := client.getGroupMembers(groupSet.GroupId)
+		drainErrorChan(errors, errorsGroupMembers)
+		groupMembersChans = append(groupMembersChans, groupMembers)
 	}
 	groupMembersIntersection := intersectChans(groupMembersChans)
 	friendsChans := make([]<-chan UserID, 0)
 	for _, profileSet := range v.Include.Friends {
-		friendsChans = append(friendsChans, client.getFriends(profileSet.UserId))
+		friendsChan, errorsFriends := client.getFriends(profileSet.UserId)
+		drainErrorChan(errors, errorsFriends)
+		friendsChans = append(friendsChans, friendsChan)
 	}
 	friendsIntersection := intersectChans(friendsChans)
-	followersChans := make([]<-chan UserID, 0)
-	for _, profileSet := range v.Include.Followers {
-		followersChans = append(followersChans, getFollowers(client, profileSet.UserId))
-	}
-	followersIntersection := intersectChans(followersChans)
-	likersChans := make([]<-chan UserID, 0)
-	for _, postSet := range v.Include.Likers {
-		likersChans = append(likersChans, client.getLikes(postSet.OwnerId, postSet.PostId))
-	}
-	likersIntersection := intersectChans(likersChans)
-	sharersChans := make([]<-chan UserID, 0)
-	for _, postSet := range v.Include.Sharers {
-		sharersChans = append(sharersChans, getSharers(client, postSet.OwnerId, postSet.PostId))
-	}
-	sharersIntersection := intersectChans(sharersChans)
+	// followersChans := make([]<-chan UserID, 0)
+	// for _, profileSet := range v.Include.Followers {
+	// 	followersChans = append(followersChans, getFollowers(client, profileSet.UserId))
+	// }
+	// followersIntersection := intersectChans(followersChans)
+	// likersChans := make([]<-chan UserID, 0)
+	// for _, postSet := range v.Include.Likers {
+	// 	likersChans = append(likersChans, client.getLikes(postSet.OwnerId, postSet.PostId))
+	// }
+	// likersIntersection := intersectChans(likersChans)
+	// sharersChans := make([]<-chan UserID, 0)
+	// for _, postSet := range v.Include.Sharers {
+	// 	sharersChans = append(sharersChans, getSharers(client, postSet.OwnerId, postSet.PostId))
+	// }
+	// sharersIntersection := intersectChans(sharersChans)
 
 	res := make([]UserID, 0)
 	// TODO: differentiate between empty map and empty intersection
@@ -129,10 +136,10 @@ func getIntersection(client *VKClient, data *json.Decoder) []UserID {
 		if !contains(userId, toExclude) &&
 			// TODO: look about algo higher
 			// (len(groupMembersIntersection) == 0 || contains(userId, groupMembersIntersection)) &&
-			(len(friendsIntersection) == 0 || contains(userId, friendsIntersection)) &&
-			(len(followersIntersection) == 0 || contains(userId, followersIntersection)) &&
-			(len(likersIntersection) == 0 || contains(userId, likersIntersection) &&
-				(len(sharersIntersection) == 0 || contains(userId, sharersIntersection))) {
+			(len(friendsIntersection) == 0 || contains(userId, friendsIntersection)) { // &&
+			// (len(followersIntersection) == 0 || contains(userId, followersIntersection)) &&
+			// (len(likersIntersection) == 0 || contains(userId, likersIntersection) &&
+			// (len(sharersIntersection) == 0 || contains(userId, sharersIntersection))) {
 			res = append(res, userId)
 		}
 	}

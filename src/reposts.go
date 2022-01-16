@@ -7,22 +7,41 @@ import (
 	"sync"
 )
 
-func (client *VKClient) getTotalUsers(method string, params url.Values) uint {
+func drainErrorChan(dest chan error, source <-chan error) {
+	for err := range source {
+		dest <- err
+	}
+}
+
+func (client *VKClient) getTotalUsers(method string, params url.Values) (total uint, err error) {
 	var v UserList
 	params.Set("offset", "0")
 	params.Set("count", "1")
-	body := client.apiRequest(method, params)
-	err := json.Unmarshal(body, &v)
+	body, err := client.apiRequest(method, params)
 	if err != nil {
-		panic(err)
+		return
 	}
-	return v.Response.Count
+	err = json.Unmarshal(body, &v)
+	if err != nil {
+		return
+	}
+	total = v.Response.Count
+	return
 }
 
-func (client *VKClient) getUserList(method string, params url.Values, count uint) <-chan UserID {
-	res := make(chan UserID)
+func (client *VKClient) getUserList(method string, params url.Values, count uint) (<-chan UserID, <-chan error) {
+	users := make(chan UserID)
+	errors := make(chan error)
 	go func() {
-		total := client.getTotalUsers(method, params)
+		defer func() {
+			close(users)
+			close(errors)
+		}()
+		total, err := client.getTotalUsers(method, params) // TODO: remove
+		if err != nil {
+			go func(err error) { errors <- err }(err)
+			return
+		}
 		countString := fmt.Sprint(count)
 		var wg sync.WaitGroup
 		const THREADS = 10
@@ -39,13 +58,19 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 					var v UserList
 					urlParams.Set("offset", fmt.Sprint(offset))
 					urlParams.Set("count", countString)
-					body := client.apiRequest(method, urlParams)
-					err := json.Unmarshal(body, &v)
+					body, err := client.apiRequest(method, urlParams)
 					if err != nil {
-						panic(err)
+						go func(err error) { errors <- err }(err)
+						return
 					}
-					for _, userID := range v.Response.Items {
-						res <- userID
+					err = json.Unmarshal(body, &v)
+					if err != nil {
+						go func(err error) { errors <- err }(err)
+						return
+					} else {
+						for _, userID := range v.Response.Items {
+							users <- userID
+						}
 					}
 					offset += STEP
 				}
@@ -53,25 +78,24 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 			}(count * i)
 		}
 		wg.Wait()
-		close(res)
 	}()
-	return res
+	return users, errors
 }
 
 // TODO: move client to args
-func (client *VKClient) getGroupMembers(groupID UserID) <-chan UserID {
+func (client *VKClient) getGroupMembers(groupID UserID) (<-chan UserID, <-chan error) {
 	return client.getUserList("groups.getMembers", url.Values{
 		"group_id": []string{fmt.Sprint(-groupID)},
 	}, 1000)
 }
 
-func (client *VKClient) getFriends(userID UserID) <-chan UserID {
+func (client *VKClient) getFriends(userID UserID) (<-chan UserID, <-chan error) {
 	return client.getUserList("friends.get", url.Values{
 		"user_id": []string{fmt.Sprint(userID)},
 	}, 5000)
 }
 
-func (client *VKClient) getLikes(ownerId UserID, postId uint) <-chan UserID {
+func (client *VKClient) getLikes(ownerId UserID, postId uint) (<-chan UserID, <-chan error) {
 	return client.getUserList("likes.getList", url.Values{
 		"type":     []string{"post"},
 		"owner_id": []string{fmt.Sprint(ownerId)},
@@ -80,10 +104,13 @@ func (client *VKClient) getLikes(ownerId UserID, postId uint) <-chan UserID {
 	}, 1000)
 }
 
-func (client *VKClient) getPostTime(post Post) uint {
-	body := client.apiRequest("wall.getById", url.Values{
+func (client *VKClient) getPostTime(post Post) (time uint, err error) {
+	body, err := client.apiRequest("wall.getById", url.Values{
 		"posts": []string{fmt.Sprintf("%d_%d", post.Owner, post.ID)},
 	})
+	if err != nil {
+		return
+	}
 	var v struct {
 		Response []struct {
 			Date    uint `json:"date"`
@@ -92,40 +119,24 @@ func (client *VKClient) getPostTime(post Post) uint {
 			} `json:"reposts"`
 		} `json:"response"`
 	}
-	err := json.Unmarshal(body, &v)
+	err = json.Unmarshal(body, &v)
 	if err != nil {
-		panic(err)
+		return
 	}
 	if len(v.Response) != 1 {
-		panic("Post is hidden")
+		err = fmt.Errorf("Post %d_%d is hidden", post.Owner, post.ID)
+		return
 	}
-	return v.Response[0].Date
-}
-
-func getPostsCount(client *VKClient, userID UserID) uint {
-	ownerIDString := fmt.Sprint(userID)
-	var v struct {
-		Response struct {
-			Count uint `json:"count"`
-		} `json:"response"`
-	}
-	body := client.apiRequest("wall.get", url.Values{
-		"owner_id": []string{ownerIDString},
-		"offset":   []string{"0"},
-		"count":    []string{"1"},
-	})
-	err := json.Unmarshal(body, &v)
-	if err != nil {
-		panic(err)
-	}
-	return v.Response.Count
+	time = v.Response[0].Date
+	return
 }
 
 type Repost struct {
 	Response struct {
-		Count int `json:"count"`
+		Count int `json:"count"` // TODO: remove
 		Items []struct {
 			Date        uint `json:"date"`
+			PostID      uint `json:"id"`
 			CopyHistory []struct {
 				PostID  uint   `json:"id"`
 				OwnerID UserID `json:"owner_id"`
@@ -134,96 +145,124 @@ type Repost struct {
 	} `json:"response"`
 }
 
-func doesHaveRepost(client *VKClient, userID UserID, post Post) bool {
-	const (
-		FOUND     = true  // repost found
-		NOT_FOUND = false // scanned all posts, not found repost
-	)
-	total := getPostsCount(client, userID)
-	if total == 0 {
-		return NOT_FOUND
-	}
-	// check first/pinned post
+// TODO: check post id can't be negative or 0, if 0 change to uint
+const (
+	NOT_FOUND = -1 // scanned all posts, not found repost
+)
+
+func findRepost(client *VKClient, userID UserID, post Post) (repostID int, err error) {
 	ownerIDString := fmt.Sprint(userID)
 	var v Repost
-	body := client.apiRequest("wall.get", url.Values{
-		"owner_id": []string{ownerIDString},
-		"offset":   []string{"0"},
-		"count":    []string{"1"},
-	})
-	err := json.Unmarshal(body, &v)
-	if err != nil {
-		panic(err)
-	}
-	copyHistory := v.Response.Items[0].CopyHistory
-	if len(copyHistory) != 0 && copyHistory[0].PostID == post.ID && copyHistory[0].OwnerID == post.Owner {
-		return FOUND
-	}
-	// check remaining posts
-	var offset uint = 1
 	const COUNT uint = 100
 	countString := fmt.Sprint(COUNT)
-	for offset < total {
-		var v Repost
-		body := client.apiRequest("wall.get", url.Values{
+	body, err := client.apiRequest("wall.get", url.Values{
+		"owner_id": []string{ownerIDString},
+		"offset":   []string{"0"},
+		"count":    []string{countString},
+	})
+	if err != nil {
+		errMsg := err.Error()
+		// TODO: change to error structs?
+		if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
+			errMsg == "Error(18) User was deleted or banned" ||
+			errMsg == "Error(30) This profile is private" {
+			return NOT_FOUND, nil
+		}
+		return
+	}
+	err = json.Unmarshal(body, &v)
+	if err != nil {
+		return
+	}
+	postsCount := v.Response.Count
+	if postsCount == 0 {
+		repostID = NOT_FOUND
+		return
+	}
+	// check first/pinned post and first 99
+	for i, item := range v.Response.Items {
+		// first post is unchecked regardless if it is pinned or not
+		if i > 0 && item.Date < post.Date {
+			repostID = NOT_FOUND
+			return
+		}
+		copyHistory := item.CopyHistory
+		if len(copyHistory) != 0 && copyHistory[0].PostID == post.ID && copyHistory[0].OwnerID == post.Owner {
+			repostID = int(item.PostID)
+			return
+		}
+	}
+	// check remaining posts
+	var offset uint = COUNT
+	for offset < uint(postsCount) {
+		body, err = client.apiRequest("wall.get", url.Values{
 			"owner_id": []string{ownerIDString},
 			"offset":   []string{fmt.Sprint(offset)},
 			"count":    []string{countString},
 		})
-		err := json.Unmarshal(body, &v)
 		if err != nil {
-			panic(err)
+			return
+		}
+		err = json.Unmarshal(body, &v)
+		if err != nil {
+			return
 		}
 		for _, item := range v.Response.Items {
 			if item.Date < post.Date {
-				return NOT_FOUND
+				repostID = NOT_FOUND
+				return
 			}
 			copyHistory := item.CopyHistory
 			if len(copyHistory) != 0 && copyHistory[0].PostID == post.ID && copyHistory[0].OwnerID == post.Owner {
-				return FOUND
+				repostID = int(item.PostID)
+				return
 			}
 		}
 		offset += COUNT
 	}
-	return NOT_FOUND
+	repostID = NOT_FOUND
+	return
 }
 
-func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) <-chan UserID {
+func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) (<-chan UserID, <-chan error) {
 	var wg sync.WaitGroup
-	userIDs := make(chan UserID)
+	users := make(chan UserID)
+	errors := make(chan error)
 
 	wg.Add(1)
 	go func() {
-		likers := client.getLikes(ownerID, postID)
+		likers, errorsLikers := client.getLikes(ownerID, postID)
+		go drainErrorChan(errors, errorsLikers)
 		for userID := range likers {
-			userIDs <- userID
+			users <- userID
 		}
 		wg.Done()
 	}()
 
-	wg.Add(1)
-	go func() {
-		var potentialUserIDs <-chan UserID
-		if ownerID < 0 { // owner is group
-			potentialUserIDs = client.getGroupMembers(ownerID)
-		} else { // owner is user
-			potentialUserIDs = client.getFriends(UserID(ownerID))
-		}
-		for userID := range potentialUserIDs {
-			userIDs <- userID
-		}
-		wg.Done()
-	}()
+	// wg.Add(1)
+	// go func() {
+	// 	var potentialUserIDs <-chan UserOrErr
+	// 	if ownerID < 0 { // owner is group
+	// 		potentialUserIDs = client.getGroupMembers(ownerID)
+	// 	} else { // owner is user
+	// 		potentialUserIDs = client.getFriends(UserID(ownerID))
+	// 	}
+	// 	for userID := range potentialUserIDs {
+	// 		usersChan <- userID
+	// 	}
+	// 	wg.Done()
+	// }()
 
 	go func() {
 		wg.Wait()
-		close(userIDs)
+		close(users)
+		close(errors)
 	}()
 
 	wasChecked := make(map[UserID]bool)
 	toCheckQueue := make(chan UserID)
 	go func() {
-		for userID := range userIDs {
+		for userID := range users {
 			if !wasChecked[userID] {
 				toCheckQueue <- userID
 				wasChecked[userID] = true
@@ -231,19 +270,30 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) <-chan UserID {
 		}
 		close(toCheckQueue)
 	}()
-	return toCheckQueue
+	return toCheckQueue, errors
 }
 
-func getCheckedIDs(client *VKClient, post Post, ids <-chan UserID) <-chan UserID {
-	resultQueue := make(chan UserID)
+type Sharer struct {
+	UserID   UserID `json:"user_id"`
+	RepostID int    `json:"repost_id"`
+}
+
+func getCheckedIDs(client *VKClient, post Post, userIDs <-chan UserID) (<-chan Sharer, <-chan error) {
+	sharers := make(chan Sharer)
+	errors := make(chan error)
 	var wg sync.WaitGroup
-	const THREADS = 100
+	const THREADS = 10
 	wg.Add(THREADS)
-	for i := 1; i <= THREADS; i++ {
+	for i := 0; i < THREADS; i++ {
 		go func() {
-			for userID := range ids {
-				if doesHaveRepost(client, userID, post) {
-					resultQueue <- userID
+			for userID := range userIDs {
+				repostID, err := findRepost(client, userID, post)
+				if err != nil {
+					errors <- err
+					continue
+				}
+				if repostID != NOT_FOUND {
+					sharers <- Sharer{userID, repostID}
 					// TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
 				}
 			}
@@ -252,30 +302,86 @@ func getCheckedIDs(client *VKClient, post Post, ids <-chan UserID) <-chan UserID
 	}
 	go func() {
 		wg.Wait()
-		close(resultQueue)
+		close(sharers)
+		close(errors)
 	}()
-	return resultQueue
+	return sharers, errors
 }
 
-func getSharers(client *VKClient, ownerId UserID, postId uint) <-chan UserID {
+func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) (<-chan Sharer, <-chan error) {
 	// TODO: expand to two vars/change to simpler structure
 	post := Post{
 		Owner: ownerId,
 		ID:    postId,
 	}
 	// TODO: separate modification of post and creation of result
-	post.Date = client.getPostTime(post)
-	uniqueIDs := getUniqueIDs(client, ownerId, postId)
-	return getCheckedIDs(client, post, uniqueIDs)
+	postDate, err := client.getPostTime(post)
+	if err != nil {
+		shares := make(chan Sharer)
+		errors := make(chan error)
+		go func(err error) { errors <- err }(err)
+		close(errors)
+		close(shares)
+		return shares, errors
+	}
+	post.Date = postDate
+	errors := make(chan error)
+	uniqueIDs, errorsUnique := getUniqueIDs(client, ownerId, postId)
+	checkedIDs, errorsChecking := getCheckedIDs(client, post, uniqueIDs)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		drainErrorChan(errors, errorsUnique)
+		wg.Done()
+	}()
+	go func() {
+		drainErrorChan(errors, errorsChecking)
+		wg.Done()
+	}()
+	go func() {
+		wg.Wait()
+		close(errors)
+	}()
+	return checkedIDs, errors
 }
 
-func getRepostersByPostUrl(client *VKClient, postUrl string) []UserID {
+func getSharers(client *VKClient, ownerId UserID, postId uint) (users <-chan UserID, errors <-chan error) {
+	usersChan := make(chan UserID)
+	reposts, errors := getSharersAndReposts(client, ownerId, postId)
+	for repost := range reposts {
+		usersChan <- repost.UserID
+	}
+	users = usersChan
+	return
+}
+
+type RepostersResult struct {
+	Reposts []Sharer `json:"reposts"`
+	Errs    []string `json:"errors"`
+}
+
+func getRepostersByPostUrl(client *VKClient, postUrl string) RepostersResult {
 	var ownerId UserID
 	var postId uint
 	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerId, &postId)
-	res := make([]UserID, 0)
-	for userID := range getSharers(client, ownerId, postId) {
-		res = append(res, userID)
-	}
+	var res RepostersResult
+	res.Reposts = make([]Sharer, 0)
+	res.Errs = make([]string, 0)
+	sharers, errors := getSharersAndReposts(client, ownerId, postId)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		for share := range sharers {
+			res.Reposts = append(res.Reposts, share)
+		}
+		wg.Done()
+	}()
+	go func() {
+		for err := range errors {
+			res.Errs = append(res.Errs, err.Error())
+		}
+		wg.Done()
+	}()
+	wg.Wait()
 	return res
 }
