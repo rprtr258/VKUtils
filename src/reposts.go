@@ -7,139 +7,6 @@ import (
 	"sync"
 )
 
-func drainErrorChan(dest chan error, source <-chan error) {
-	for err := range source {
-		dest <- err
-	}
-}
-
-func (client *VKClient) getTotalUsers(method string, params url.Values) (total uint, err error) {
-	var v UserList
-	params.Set("offset", "0")
-	params.Set("count", "1")
-	body, err := client.apiRequest(method, params)
-	if err != nil {
-		return
-	}
-	err = json.Unmarshal(body, &v)
-	if err != nil {
-		return
-	}
-	total = v.Response.Count
-	return
-}
-
-func (client *VKClient) getUserList(method string, params url.Values, count uint) (<-chan UserID, <-chan error) {
-	users := make(chan UserID)
-	errors := make(chan error)
-	go func() {
-		defer func() {
-			close(users)
-		}()
-		total, err := client.getTotalUsers(method, params) // TODO: remove
-		if err != nil {
-			go func(err error) {
-				errors <- err
-				close(errors)
-			}(err)
-			return
-		}
-		countString := fmt.Sprint(count)
-		var wg sync.WaitGroup
-		const THREADS = 10
-		wg.Add(THREADS)
-		STEP := count * THREADS
-		for i := uint(0); i < THREADS; i++ {
-			go func(start uint) {
-				urlParams := make(url.Values)
-				for k, v := range params {
-					urlParams[k] = v
-				}
-				offset := start
-				for offset < total {
-					var v UserList
-					urlParams.Set("offset", fmt.Sprint(offset))
-					urlParams.Set("count", countString)
-					body, err := client.apiRequest(method, urlParams)
-					if err != nil {
-						go func(err error) {
-							errors <- err
-							close(errors)
-						}(err)
-						return
-					}
-					err = json.Unmarshal(body, &v)
-					if err != nil {
-						go func(err error) {
-							errors <- err
-							close(errors)
-						}(err)
-						return
-					} else {
-						for _, userID := range v.Response.Items {
-							users <- userID
-						}
-					}
-					offset += STEP
-				}
-				wg.Done()
-			}(count * i)
-		}
-		wg.Wait()
-		close(errors)
-	}()
-	return users, errors
-}
-
-// TODO: move client to args
-func (client *VKClient) getGroupMembers(groupID UserID) (<-chan UserID, <-chan error) {
-	return client.getUserList("groups.getMembers", url.Values{
-		"group_id": []string{fmt.Sprint(-groupID)},
-	}, 1000)
-}
-
-func (client *VKClient) getFriends(userID UserID) (<-chan UserID, <-chan error) {
-	return client.getUserList("friends.get", url.Values{
-		"user_id": []string{fmt.Sprint(userID)},
-	}, 5000)
-}
-
-func (client *VKClient) getLikes(ownerId UserID, postId uint) (<-chan UserID, <-chan error) {
-	return client.getUserList("likes.getList", url.Values{
-		"type":     []string{"post"},
-		"owner_id": []string{fmt.Sprint(ownerId)},
-		"item_id":  []string{fmt.Sprint(postId)},
-		"skip_own": []string{"0"},
-	}, 1000)
-}
-
-func (client *VKClient) getPostTime(post Post) (time uint, err error) {
-	body, err := client.apiRequest("wall.getById", url.Values{
-		"posts": []string{fmt.Sprintf("%d_%d", post.Owner, post.ID)},
-	})
-	if err != nil {
-		return
-	}
-	var v struct {
-		Response []struct {
-			Date    uint `json:"date"`
-			Reposts struct {
-				Count int `json:"count"`
-			} `json:"reposts"`
-		} `json:"response"`
-	}
-	err = json.Unmarshal(body, &v)
-	if err != nil {
-		return
-	}
-	if len(v.Response) != 1 {
-		err = fmt.Errorf("Post %d_%d is hidden", post.Owner, post.ID)
-		return
-	}
-	time = v.Response[0].Date
-	return
-}
-
 type Repost struct {
 	Response struct {
 		Count int `json:"count"` // TODO: remove
@@ -154,45 +21,49 @@ type Repost struct {
 	} `json:"response"`
 }
 
-// TODO: check post id can't be negative or 0, if 0 change to uint
 const (
-	NOT_FOUND = -1 // scanned all posts, not found repost
+	NOT_FOUND_REPOST           = -1 // scanned all posts, not found repost
+	wallGet_count              = 100
+	wallGet_countString        = "100"
+	USER_CHECK_REPOSTS_THREADS = 10
 )
+
+func (client *VKClient) getPosts(ownerIDString string, offset uint, countString string) (v Repost, err error) {
+	body, err := client.apiRequest("wall.get", url.Values{
+		"owner_id": []string{ownerIDString},
+		"offset":   []string{fmt.Sprint(offset)},
+		"count":    []string{countString},
+	})
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(body, &v)
+	return
+}
 
 func findRepost(client *VKClient, userID UserID, post Post) (repostID int, err error) {
 	ownerIDString := fmt.Sprint(userID)
-	var v Repost
-	const COUNT uint = 100
-	countString := fmt.Sprint(COUNT)
-	body, err := client.apiRequest("wall.get", url.Values{
-		"owner_id": []string{ownerIDString},
-		"offset":   []string{"0"},
-		"count":    []string{countString},
-	})
+	v, err := client.getPosts(ownerIDString, 0, wallGet_countString)
 	if err != nil {
 		errMsg := err.Error()
 		// TODO: change to error structs?
 		if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
 			errMsg == "Error(18) User was deleted or banned" ||
 			errMsg == "Error(30) This profile is private" {
-			return NOT_FOUND, nil
+			return NOT_FOUND_REPOST, nil
 		}
-		return
-	}
-	err = json.Unmarshal(body, &v)
-	if err != nil {
 		return
 	}
 	postsCount := v.Response.Count
 	if postsCount == 0 {
-		repostID = NOT_FOUND
+		repostID = NOT_FOUND_REPOST
 		return
 	}
 	// check first/pinned post and first 99
 	for i, item := range v.Response.Items {
 		// first post is unchecked regardless if it is pinned or not
 		if i > 0 && item.Date < post.Date {
-			repostID = NOT_FOUND
+			repostID = NOT_FOUND_REPOST
 			return
 		}
 		copyHistory := item.CopyHistory
@@ -202,23 +73,15 @@ func findRepost(client *VKClient, userID UserID, post Post) (repostID int, err e
 		}
 	}
 	// check remaining posts
-	var offset uint = COUNT
+	var offset uint = wallGet_count
 	for offset < uint(postsCount) {
-		body, err = client.apiRequest("wall.get", url.Values{
-			"owner_id": []string{ownerIDString},
-			"offset":   []string{fmt.Sprint(offset)},
-			"count":    []string{countString},
-		})
-		if err != nil {
-			return
-		}
-		err = json.Unmarshal(body, &v)
+		v, err = client.getPosts(ownerIDString, offset, wallGet_countString)
 		if err != nil {
 			return
 		}
 		for _, item := range v.Response.Items {
 			if item.Date < post.Date {
-				repostID = NOT_FOUND
+				repostID = NOT_FOUND_REPOST
 				return
 			}
 			copyHistory := item.CopyHistory
@@ -227,9 +90,9 @@ func findRepost(client *VKClient, userID UserID, post Post) (repostID int, err e
 				return
 			}
 		}
-		offset += COUNT
+		offset += wallGet_count
 	}
-	repostID = NOT_FOUND
+	repostID = NOT_FOUND_REPOST
 	return
 }
 
@@ -295,9 +158,8 @@ func getCheckedIDs(client *VKClient, post Post, userIDs <-chan UserID) (<-chan S
 	sharers := make(chan Sharer)
 	errors := make(chan error)
 	var wg sync.WaitGroup
-	const THREADS = 10
-	wg.Add(THREADS)
-	for i := 0; i < THREADS; i++ {
+	wg.Add(USER_CHECK_REPOSTS_THREADS)
+	for i := 0; i < USER_CHECK_REPOSTS_THREADS; i++ {
 		go func() {
 			for userID := range userIDs {
 				repostID, err := findRepost(client, userID, post)
@@ -305,7 +167,7 @@ func getCheckedIDs(client *VKClient, post Post, userIDs <-chan UserID) (<-chan S
 					errors <- err
 					continue
 				}
-				if repostID != NOT_FOUND {
+				if repostID != NOT_FOUND_REPOST {
 					sharers <- Sharer{userID, repostID}
 					// TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
 				}
@@ -321,6 +183,12 @@ func getCheckedIDs(client *VKClient, post Post, userIDs <-chan UserID) (<-chan S
 	return sharers, errors
 }
 
+func drainErrorChan(dest chan error, source <-chan error) {
+	for err := range source {
+		dest <- err
+	}
+}
+
 func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) (<-chan Sharer, <-chan error) {
 	// TODO: expand to two vars/change to simpler structure
 	post := Post{
@@ -331,10 +199,12 @@ func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) (<-chan
 	postDate, err := client.getPostTime(post)
 	if err != nil {
 		shares := make(chan Sharer)
-		errors := make(chan error)
-		go func(err error) { errors <- err }(err)
-		close(errors)
 		close(shares)
+		errors := make(chan error)
+		go func(err error) {
+			errors <- err
+			close(errors)
+		}(err)
 		return shares, errors
 	}
 	post.Date = postDate

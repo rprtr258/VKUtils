@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,11 @@ import (
 
 type Handler func(http.ResponseWriter, *http.Request)
 type Any interface{}
+
+const (
+	SERVER_HOST = "localhost"
+	SERVER_PORT = 8000
+)
 
 func handlerMiddleware(handler func(*VKClient, *http.Request) Any) Handler {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -29,8 +35,6 @@ func main() {
 	if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
 		panic("VK_ACCESS_TOKEN was not found in env vars")
 	}
-	log.Println("Starting server on http://localhost:8000")
-
 	// TODO: fix
 	http.HandleFunc("/reposts", handlerMiddleware(
 		func(client *VKClient, r *http.Request) Any {
@@ -58,5 +62,7 @@ func main() {
 		},
 	))
 
-	log.Fatal(http.ListenAndServe("localhost:8000", nil))
+	serverAddress := fmt.Sprintf("%s:%d", SERVER_HOST, SERVER_PORT)
+	log.Printf("Starting server on http://%s\n", serverAddress)
+	log.Fatal(http.ListenAndServe(serverAddress, nil))
 }
