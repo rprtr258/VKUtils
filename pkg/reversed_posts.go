@@ -1,4 +1,4 @@
-package main
+package vkutils
 
 import (
 	"encoding/json"
@@ -32,7 +32,7 @@ func getPostsCount(client *VKClient, userID UserID) (postsCount uint, err error)
 	return
 }
 
-func getReversedPosts(client *VKClient, groupUrl string) (res ReversePostsResult, err error) {
+func GetReversedPosts(client *VKClient, groupUrl string) (res ReversePostsResult, err error) {
 	var groupName string
 	fmt.Sscanf(groupUrl, "https://vk.com/%s", &groupName)
 

@@ -1,4 +1,4 @@
-package main
+package vkutils
 
 import (
 	"encoding/json"
@@ -243,7 +243,7 @@ type RepostersResult struct {
 	Errs    []string `json:"errors"`
 }
 
-func getRepostersByPostUrl(client *VKClient, postUrl string) RepostersResult {
+func GetRepostersByPostUrl(client *VKClient, postUrl string) RepostersResult {
 	var ownerId UserID
 	var postId uint
 	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerId, &postId)

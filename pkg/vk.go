@@ -1,4 +1,4 @@
-package main
+package vkutils
 
 import (
 	"encoding/json"

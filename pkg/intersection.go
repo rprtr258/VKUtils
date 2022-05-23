@@ -1,4 +1,4 @@
-package main
+package vkutils
 
 import (
 	"encoding/json"
@@ -38,7 +38,7 @@ func intersectChans(chans []<-chan UserID) UserSet {
 	return res
 }
 
-func getIntersection(client *VKClient, data *json.Decoder) []UserID {
+func GetIntersection(client *VKClient, data *json.Decoder) []UserID {
 	type GroupSet struct {
 		GroupId UserID `json:"group_id"`
 	}
