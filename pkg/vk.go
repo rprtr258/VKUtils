@@ -63,6 +63,7 @@ func (err *VkError) Error() string {
 	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
 }
 
+// TODO: print request, response, timing
 func (client *VKClient) apiRequest(method string, params url.Values) (res []byte, err error) {
 	url := fmt.Sprintf("https://api.vk.com/method/%s", method)
 	req, err := http.NewRequest("GET", url, nil)
