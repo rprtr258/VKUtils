@@ -3,7 +3,6 @@ package vkutils
 import (
 	"fmt"
 	"net/url"
-	"sync"
 
 	f "github.com/primetalk/goio/fun"
 	i "github.com/primetalk/goio/io"
@@ -57,7 +56,7 @@ func findRepostImplImpl(client *VKClient, ownerIDString string, offset uint, tot
 	var stepResultIo i.IO[s.StepResult[s.Stream[WallPost]]]
 	newOffset := offset + wallGet_count
 	if offset == 0 {
-		stepResultIo = i.Map[WallPosts, s.StepResult[s.Stream[WallPost]]](
+		stepResultIo = i.Map(
 			client.getPosts(ownerIDString, offset, wallGet_countString),
 			func(ws WallPosts) s.StepResult[s.Stream[WallPost]] {
 				return s.NewStepResult(
@@ -69,10 +68,10 @@ func findRepostImplImpl(client *VKClient, ownerIDString string, offset uint, tot
 	} else if offset >= total {
 		stepResultIo = i.Lift(s.NewStepResultFinished[s.Stream[WallPost]]())
 	} else {
-		stepResultIo = i.Map[WallPosts, s.StepResult[s.Stream[WallPost]]](
+		stepResultIo = i.Map(
 			client.getPosts(ownerIDString, newOffset, wallGet_countString),
 			func(ws WallPosts) s.StepResult[s.Stream[WallPost]] {
-				return s.NewStepResult[s.Stream[WallPost]](
+				return s.NewStepResult(
 					s.FromSlice(ws.Response.Items),
 					findRepostImplImpl(client, ownerIDString, newOffset, ws.Response.Count),
 				)
@@ -84,16 +83,16 @@ func findRepostImplImpl(client *VKClient, ownerIDString string, offset uint, tot
 
 func findRepostImpl(client *VKClient, ownerIDString string) s.Stream[WallPost] {
 	vv := findRepostImplImpl(client, ownerIDString, 0, 0)
-	return s.Flatten[WallPost](vv)
+	return s.Flatten(vv)
 }
 
 func TakeWhile[A any](sa s.Stream[A], p func(A) bool) s.Stream[A] {
-	return s.FromStepResult(i.Map[s.StepResult[A], s.StepResult[A]](
+	return s.FromStepResult(i.Map[s.StepResult[A]](
 		sa,
 		func(a s.StepResult[A]) s.StepResult[A] {
 			if p(a.Value) {
 				cont := TakeWhile(a.Continuation, p)
-				return s.NewStepResult[A](a.Value, cont)
+				return s.NewStepResult(a.Value, cont)
 			} else {
 				return s.NewStepResultFinished[A]()
 			}
@@ -133,7 +132,7 @@ func findRepost(client *VKClient, userID UserID, post Post) i.IO[f.Either[uint, 
 						return i.Lift(f.Left[uint, f.Unit](www.PostID))
 					},
 					func(e error) i.IO[f.Either[uint, f.Unit]] {
-						return i.Lift(f.Right[uint, f.Unit](f.Unit1))
+						return i.Lift(f.Right[uint](f.Unit1))
 					},
 				)
 			}
@@ -143,7 +142,6 @@ func findRepost(client *VKClient, userID UserID, post Post) i.IO[f.Either[uint, 
 
 func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID] {
 	wasChecked := make(map[UserID]struct{})
-	toCheckQueue := make(chan UserID)
 
 	// TODO: add commenters?
 	// scan likers
@@ -175,14 +173,14 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 		},
 	)
 
-	return i.FlatMap[f.Unit, s.StepResult[UserID]](
+	return i.FlatMap(
 		likersIo,
 		func(_ f.Unit) i.IO[s.StepResult[UserID]] {
-			return i.FlatMap[f.Unit, s.StepResult[UserID]](
+			return i.FlatMap(
 				potentialUsersIo,
 				func(_ f.Unit) i.IO[s.StepResult[UserID]] {
 					slice := make([]UserID, 0, len(wasChecked))
-					for k, _ := range wasChecked {
+					for k := range wasChecked {
 						slice = append(slice, k)
 					}
 					return s.FromSlice(slice)
@@ -200,6 +198,7 @@ type Sharer struct {
 
 // TODO: remove NOT_FOUND_REPOST const
 // TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
+// TODO: is there a simpler way to transform Stream[IO[A]] to IO[Stream[A]] (which in turn is Stream[A])?
 func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[Sharer] {
 	a := s.Map(
 		userIDs,
@@ -239,59 +238,36 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 	)
 }
 
-func drainErrorChan(dest chan error, source <-chan error) {
-	for err := range source {
-		dest <- err
-	}
-}
-
-func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) (<-chan Sharer, <-chan error) {
+func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) s.Stream[Sharer] {
 	// TODO: expand to two vars/change to simpler structure
 	post := Post{
 		Owner: ownerId,
 		ID:    postId,
 	}
 	// TODO: separate modification of post and creation of result
-	postDate, err := client.getPostTime(post)
-	if err != nil {
-		shares := make(chan Sharer)
-		close(shares)
-		errors := make(chan error)
-		go func(err error) {
-			errors <- err
-			close(errors)
-		}(err)
-		return shares, errors
-	}
-	post.Date = postDate
-	errors := make(chan error)
-	uniqueIDs, errorsUnique := getUniqueIDs(client, ownerId, postId)
-	checkedIDs, errorsChecking := getCheckedIDs(client, post, uniqueIDs)
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		drainErrorChan(errors, errorsUnique)
-		wg.Done()
-	}()
-	go func() {
-		drainErrorChan(errors, errorsChecking)
-		wg.Done()
-	}()
-	go func() {
-		wg.Wait()
-		close(errors)
-	}()
-	return checkedIDs, errors
+	i.Map(
+		client.getPostTime(post), // TODO: signature without struct
+		func(postDate uint) Post {
+			return Post{
+				Owner: ownerId,
+				ID:    postId,
+				Date:  postDate,
+			}
+		},
+	)
+	uniqueIDs := getUniqueIDs(client, ownerId, postId)
+	checkedIDs := getCheckedIDs(client, post, uniqueIDs)
+	return checkedIDs
 }
 
-func getSharers(client *VKClient, ownerId UserID, postId uint) (users <-chan UserID, errors <-chan error) {
-	usersChan := make(chan UserID)
-	reposts, errors := getSharersAndReposts(client, ownerId, postId)
-	for repost := range reposts {
-		usersChan <- repost.UserID
-	}
-	users = usersChan
-	return
+func getSharers(client *VKClient, ownerId UserID, postId uint) s.Stream[UserID] {
+	reposts := getSharersAndReposts(client, ownerId, postId)
+	return s.Map(
+		reposts,
+		func(h Sharer) UserID {
+			return h.UserID
+		},
+	)
 }
 
 type RepostersResult struct {
@@ -299,28 +275,28 @@ type RepostersResult struct {
 	Errs    []string `json:"errors"`
 }
 
+func parsePostUrl(url string) (ownerId UserID, postId uint) {
+	fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerId, &postId)
+	return
+}
+
 func GetRepostersByPostUrl(client *VKClient, postUrl string) RepostersResult {
-	var ownerId UserID
-	var postId uint
-	fmt.Sscanf(postUrl, "https://vk.com/wall%d_%d", &ownerId, &postId)
-	var res RepostersResult
-	res.Reposts = make([]Sharer, 0)
-	res.Errs = make([]string, 0)
-	sharers, errors := getSharersAndReposts(client, ownerId, postId)
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		for share := range sharers {
+	ownerId, postId := parsePostUrl(postUrl)
+	sharers := getSharersAndReposts(client, ownerId, postId)
+	res := RepostersResult{
+		make([]Sharer, 0),
+		make([]string, 0),
+	}
+	uuu := s.Collect(
+		sharers,
+		func(share Sharer) error {
 			res.Reposts = append(res.Reposts, share)
-		}
-		wg.Done()
-	}()
-	go func() {
-		for err := range errors {
-			res.Errs = append(res.Errs, err.Error())
-		}
-		wg.Done()
-	}()
-	wg.Wait()
+			return nil
+		},
+	)
+	_, err := i.UnsafeRunSync(uuu)
+	if err != nil {
+		res.Errs = append(res.Errs, err.Error())
+	}
 	return res
 }

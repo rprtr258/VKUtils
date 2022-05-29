@@ -12,6 +12,7 @@ import (
 )
 
 func main() {
+	// debug.SetMaxStack(10000)
 	var client vkutils.VKClient
 	rootCmd := cobra.Command{
 		Use:   "vkutils",
