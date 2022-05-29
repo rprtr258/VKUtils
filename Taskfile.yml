@@ -4,9 +4,8 @@ dotenv: [".env"]
 
 tasks:
   run:
-    dir: src
     cmds:
-      - go run *.go
+      - go run main.go reposts -u https://vk.com/wall-149859311_975
   bench:
     dir: tests
     cmds:

@@ -6,8 +6,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
+
+	. "github.com/primetalk/goio/fun"
+	. "github.com/primetalk/goio/io"
+	. "github.com/primetalk/goio/stream"
 )
 
 type UserID int
@@ -33,7 +36,7 @@ type VKClient struct {
 
 // vk api constants
 const (
-	getUserList_threads     = 10
+	// getUserList_threads     = 10
 	groups_getMembers_limit = 1000
 	friends_get_limit       = 5000
 	likes_getList_limit     = 1000
@@ -63,8 +66,16 @@ func (err *VkError) Error() string {
 	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
 }
 
+func jsonUnmarshall[J any](body []byte) IO[J] {
+	return Eval(func() (J, error) {
+		var v J
+		err := json.Unmarshal(body, &v)
+		return v, err
+	})
+}
+
 // TODO: print request, response, timing
-func (client *VKClient) apiRequest(method string, params url.Values) (res []byte, err error) {
+func (client *VKClient) apiRequestRaw(method string, params url.Values) (res []byte, err error) {
 	url := fmt.Sprintf("https://api.vk.com/method/%s", method)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -86,6 +97,7 @@ func (client *VKClient) apiRequest(method string, params url.Values) (res []byte
 			// if user hid their wall
 			return
 		}
+		defer resp.Body.Close()
 		body, err = io.ReadAll(resp.Body)
 		if err != nil {
 			panic(err)
@@ -116,96 +128,84 @@ func (client *VKClient) apiRequest(method string, params url.Values) (res []byte
 	return
 }
 
-func (client *VKClient) getTotalUsers(method string, params url.Values) (total uint, err error) {
-	var v UserList
-	params.Set("offset", "0")
-	params.Set("count", "1")
-	body, err := client.apiRequest(method, params)
-	if err != nil {
-		return
-	}
-	err = json.Unmarshal(body, &v)
-	if err != nil {
-		return
-	}
-	total = v.Response.Count
-	return
+func apiRequest(client *VKClient, method string, params url.Values) IO[[]byte] {
+	return Eval(func() ([]byte, error) {
+		return client.apiRequestRaw(method, params)
+	})
 }
 
-func (client *VKClient) getUserList(method string, params url.Values, count uint) (<-chan UserID, <-chan error) {
-	users := make(chan UserID)
-	errors := make(chan error)
-	go func() {
-		defer func() {
-			close(users)
-		}()
-		total, err := client.getTotalUsers(method, params) // TODO: remove
-		if err != nil {
-			go func(err error) {
-				errors <- err
-				close(errors)
-			}(err)
-			return
-		}
-		countString := fmt.Sprint(count)
-		var wg sync.WaitGroup
-		wg.Add(getUserList_threads)
-		STEP := count * getUserList_threads
-		for i := uint(0); i < getUserList_threads; i++ {
-			go func(start uint) {
-				urlParams := make(url.Values)
-				for k, v := range params {
-					urlParams[k] = v
-				}
-				offset := start
-				for offset < total {
-					var v UserList
-					urlParams.Set("offset", fmt.Sprint(offset))
-					urlParams.Set("count", countString)
-					body, err := client.apiRequest(method, urlParams)
-					if err != nil {
-						go func(err error) {
-							errors <- err
-							close(errors)
-						}(err)
-						return
-					}
-					err = json.Unmarshal(body, &v)
-					if err != nil {
-						go func(err error) {
-							errors <- err
-							close(errors)
-						}(err)
-						return
-					} else {
-						for _, userID := range v.Response.Items {
-							users <- userID
-						}
-					}
-					offset += STEP
-				}
-				wg.Done()
-			}(count * i)
-		}
-		wg.Wait()
-		close(errors)
-	}()
-	return users, errors
+// TODO: returns total and stream, make better interface (how?)
+func getUserListImplImpl(client *VKClient, method string, params url.Values, countString string, offset uint, urlParams url.Values) IO[Pair[uint, Stream[UserID]]] {
+	urlParams.Set("offset", fmt.Sprint(offset))
+	urlParams.Set("count", countString)
+	body := apiRequest(client, method, urlParams)
+	userList := FlatMap(body, jsonUnmarshall[UserList])
+	return Map[UserList, Pair[uint, Stream[UserID]]](
+		userList,
+		func(v UserList) Pair[uint, Stream[UserID]] {
+			return NewPair[uint, Stream[UserID]](
+				v.Response.Count,
+				FromSlice[UserID](v.Response.Items),
+			)
+		},
+	)
 }
 
-func (client *VKClient) getGroupMembers(groupID UserID) (<-chan UserID, <-chan error) {
+// TODO: rewrite to loop?
+func getUserListImpl(client *VKClient, method string, params url.Values, count uint, countString string, offset uint, total uint, urlParams url.Values) Stream[Stream[UserID]] {
+	var stepResultIo IO[StepResult[Stream[UserID]]]
+	newOffset := offset + count
+	if offset == 0 {
+		stepResultIo = Map[Pair[uint, Stream[UserID]], StepResult[Stream[UserID]]](
+			getUserListImplImpl(client, method, params, countString, newOffset, urlParams),
+			func(totalAndFirstBatch Pair[uint, Stream[UserID]]) StepResult[Stream[UserID]] {
+				total, firstBatch := totalAndFirstBatch.V1, totalAndFirstBatch.V2
+				return NewStepResult[Stream[UserID]](
+					firstBatch,
+					getUserListImpl(client, method, params, count, countString, newOffset, total, urlParams),
+				)
+			},
+		)
+	} else if offset >= total {
+		stepResultIo = Lift(NewStepResultFinished[Stream[UserID]]())
+	} else {
+		stepResultIo = Map[Pair[uint, Stream[UserID]], StepResult[Stream[UserID]]](
+			getUserListImplImpl(client, method, params, countString, newOffset, urlParams),
+			func(somethingAndFirstBatch Pair[uint, Stream[UserID]]) StepResult[Stream[UserID]] {
+				return NewStepResult[Stream[UserID]](
+					somethingAndFirstBatch.V2,
+					getUserListImpl(client, method, params, count, countString, newOffset, total, urlParams),
+				)
+			},
+		)
+	}
+	return FromStepResult(stepResultIo)
+}
+
+// TODO: merge method and count in one structure
+func (client *VKClient) getUserList(method string, params url.Values, count uint) Stream[UserID] {
+	countString := fmt.Sprint(count)
+	urlParams := make(url.Values)
+	for k, v := range params {
+		urlParams[k] = v
+	}
+	return Flatten(getUserListImpl(client, method, params, count, countString, 0, 42 /*TODO: remove*/, urlParams))
+}
+
+// TODO: group id is groupid, user id is userid
+func (client *VKClient) getGroupMembers(groupID UserID) Stream[UserID] {
 	return client.getUserList("groups.getMembers", url.Values{
 		"group_id": []string{fmt.Sprint(-groupID)},
 	}, groups_getMembers_limit)
 }
 
-func (client *VKClient) getFriends(userID UserID) (<-chan UserID, <-chan error) {
+func (client *VKClient) getFriends(userID UserID) Stream[UserID] {
 	return client.getUserList("friends.get", url.Values{
 		"user_id": []string{fmt.Sprint(userID)},
 	}, friends_get_limit)
 }
 
-func (client *VKClient) getLikes(ownerId UserID, postId uint) (<-chan UserID, <-chan error) {
+func (client *VKClient) getLikes(ownerId UserID, postId uint) Stream[UserID] {
 	return client.getUserList("likes.getList", url.Values{
 		"type":     []string{"post"},
 		"owner_id": []string{fmt.Sprint(ownerId)},
@@ -214,14 +214,17 @@ func (client *VKClient) getLikes(ownerId UserID, postId uint) (<-chan UserID, <-
 	}, likes_getList_limit)
 }
 
-func (client *VKClient) getPostTime(post Post) (time uint, err error) {
-	body, err := client.apiRequest("wall.getById", url.Values{
+type PostHiddenErr *Post
+
+func (p PostHiddenErr) Error() string {
+	return fmt.Sprintf("Post %d_%d is hidden", p.Owner, p.ID)
+}
+
+func (client *VKClient) getPostTime(post Post) IO[uint] {
+	body := apiRequest(client, "wall.getById", url.Values{
 		"posts": []string{fmt.Sprintf("%d_%d", post.Owner, post.ID)},
 	})
-	if err != nil {
-		return
-	}
-	var v struct {
+	type V struct {
 		Response []struct {
 			Date    uint `json:"date"`
 			Reposts struct {
@@ -229,14 +232,15 @@ func (client *VKClient) getPostTime(post Post) (time uint, err error) {
 			} `json:"reposts"`
 		} `json:"response"`
 	}
-	err = json.Unmarshal(body, &v)
-	if err != nil {
-		return
-	}
-	if len(v.Response) != 1 {
-		err = fmt.Errorf("Post %d_%d is hidden", post.Owner, post.ID)
-		return
-	}
-	time = v.Response[0].Date
-	return
+	userList := FlatMap(body, jsonUnmarshall[V])
+	return FlatMap[V, uint](
+		userList,
+		func(v V) IO[uint] {
+			if len(v.Response) != 1 {
+				return Fail[uint](PostHiddenErr(&post))
+			} else {
+				return Lift(v.Response[0].Date)
+			}
+		},
+	)
 }

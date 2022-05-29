@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"os"
@@ -45,43 +44,43 @@ func main() {
 	repostsCmd.MarkFlagRequired("url")
 	rootCmd.AddCommand(&repostsCmd)
 
-	// TODO: dump to db/sqlite like query, filter by date range, reversed flag, in text, etc.
-	// TODO: search in different groups, profiles
-	// https://vk.com/app3876642
-	// https://vk.com/wall-2158488_651604
-	var groupUrl string
-	revPostsUrl := cobra.Command{ // TODO: rename to dump posts
-		Use:   "revposts",
-		Short: "List group posts in reversed order (from old to new).",
-		Args:  cobra.MaximumNArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := vkutils.GetReversedPosts(&client, groupUrl)
-			if err != nil {
-				return err
-			}
-			log.Println(res)
-			return nil
-		},
-		Example: "fimgs cluster -n 4 girl.png",
-	}
-	revPostsUrl.Flags().StringVarP(&groupUrl, "url", "u", "", "url of vk group")
-	revPostsUrl.MarkFlagRequired("url")
-	rootCmd.AddCommand(&revPostsUrl)
+	// // TODO: dump to db/sqlite like query, filter by date range, reversed flag, in text, etc.
+	// // TODO: search in different groups, profiles
+	// // https://vk.com/app3876642
+	// // https://vk.com/wall-2158488_651604
+	// var groupUrl string
+	// revPostsUrl := cobra.Command{ // TODO: rename to dump posts
+	// 	Use:   "revposts",
+	// 	Short: "List group posts in reversed order (from old to new).",
+	// 	Args:  cobra.MaximumNArgs(0),
+	// 	RunE: func(cmd *cobra.Command, args []string) error {
+	// 		res, err := vkutils.GetReversedPosts(&client, groupUrl)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 		log.Println(res)
+	// 		return nil
+	// 	},
+	// 	Example: "fimgs cluster -n 4 girl.png",
+	// }
+	// revPostsUrl.Flags().StringVarP(&groupUrl, "url", "u", "", "url of vk group")
+	// revPostsUrl.MarkFlagRequired("url")
+	// rootCmd.AddCommand(&revPostsUrl)
 
-	intersectionCmd := cobra.Command{
-		Use:   "intersection",
-		Short: "Find users sets intersection.",
-		Args:  cobra.MaximumNArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			res := vkutils.GetIntersection(&client, &json.Decoder{})
-			log.Println(res)
-			return nil
-		},
-		Example: "fimgs cluster -n 4 girl.png",
-	}
-	intersectionCmd.Flags().StringVarP(&groupUrl, "url", "u", "", "url of vk group")
-	intersectionCmd.MarkFlagRequired("url")
-	rootCmd.AddCommand(&intersectionCmd)
+	// intersectionCmd := cobra.Command{
+	// 	Use:   "intersection",
+	// 	Short: "Find users sets intersection.",
+	// 	Args:  cobra.MaximumNArgs(0),
+	// 	RunE: func(cmd *cobra.Command, args []string) error {
+	// 		res := vkutils.GetIntersection(&client, &json.Decoder{})
+	// 		log.Println(res)
+	// 		return nil
+	// 	},
+	// 	Example: "fimgs cluster -n 4 girl.png",
+	// }
+	// intersectionCmd.Flags().StringVarP(&groupUrl, "url", "u", "", "url of vk group")
+	// intersectionCmd.MarkFlagRequired("url")
+	// rootCmd.AddCommand(&intersectionCmd)
 
 	start := time.Now()
 	if err := rootCmd.Execute(); err != nil {

@@ -16,7 +16,7 @@ func getPostsCount(client *VKClient, userID UserID) (postsCount uint, err error)
 			Count uint `json:"count"`
 		} `json:"response"`
 	}
-	body, err := client.apiRequest("wall.get", url.Values{
+	body, err := client.apiRequestRaw("wall.get", url.Values{
 		"owner_id": []string{ownerIDString},
 		"offset":   []string{"0"},
 		"count":    []string{"1"},
@@ -38,7 +38,7 @@ func GetReversedPosts(client *VKClient, groupUrl string) (res ReversePostsResult
 
 	params := make(url.Values)
 	params.Set("group_id", groupName)
-	body, err := client.apiRequest("groups.getById", params)
+	body, err := client.apiRequestRaw("groups.getById", params)
 	if err != nil {
 		return
 	}
@@ -63,7 +63,7 @@ func GetReversedPosts(client *VKClient, groupUrl string) (res ReversePostsResult
 	} else {
 		offset = postsCount - MAX_POSTS_COUNT
 	}
-	body, err = client.apiRequest("wall.get", url.Values{
+	body, err = client.apiRequestRaw("wall.get", url.Values{
 		"owner_id": []string{fmt.Sprint(groupId)},
 		"offset":   []string{fmt.Sprint(offset)},
 		"count":    []string{fmt.Sprint(MAX_POSTS_COUNT)},
