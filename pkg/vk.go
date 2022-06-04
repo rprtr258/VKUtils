@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pkg/errors"
 	f "github.com/rprtr258/vk-utils/flow/fun"
 	i "github.com/rprtr258/vk-utils/flow/io"
 	s "github.com/rprtr258/vk-utils/flow/stream"
@@ -47,7 +46,7 @@ const (
 // application constants
 const (
 	api_version         = "5.131"
-	API_REQUEST_RETRIES = 1 //00 // TODO: fix stack overflow
+	API_REQUEST_RETRIES = 100
 	WAIT_TIME_TO_RETRY  = time.Millisecond * 500
 )
 
@@ -72,12 +71,16 @@ func jsonUnmarshall[J any](body []byte) i.IO[J] {
 	return i.Eval(func() (J, error) {
 		var v J
 		err := json.Unmarshal(body, &v)
-		return v, errors.Wrap(err, string(body))
+		if err != nil {
+			var j J
+			return j, fmt.Errorf("error while parsing '%s': %w", string(body), err)
+		}
+		return v, nil
 	})
 }
 
 // TODO: print request, response, timing
-func (client *VKClient) apiRequestRaw(method string, params url.Values) (res []byte, err error) {
+func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []byte, err error) {
 	url := fmt.Sprintf("https://api.vk.com/method/%s", method)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -92,7 +95,6 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (res []b
 	req.URL.RawQuery = req_params.Encode()
 	timeLimitTries := 0
 	var resp *http.Response
-	var body []byte
 	for timeLimitTries < API_REQUEST_RETRIES {
 		resp, err = client.Client.Do(req)
 		if err != nil {
@@ -104,6 +106,7 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (res []b
 		if err != nil {
 			panic(err)
 		}
+		log.Println("GOT: ", string(body), " ON ", method, " ", params)
 		var v struct {
 			Err VkError `json:"error"`
 		}
@@ -123,7 +126,6 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (res []b
 			}
 			return
 		}
-		res = body
 		return
 	}
 	err = fmt.Errorf("%s(%v) = Timeout", method, params)
@@ -170,7 +172,7 @@ func (xs *userListImpl) Next() f.Option[UserID] {
 	}
 
 	log.Println("GET USER LIST", xs.offset)
-	if xs.offset == 0 {
+	if /*xs.offset == 0*/ xs.total.IsNone() || xs.offset < xs.total.Unwrap() {
 		return i.Fold(
 			getOnePageOfUsers(xs.offset),
 			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) f.Option[UserID] {
@@ -179,24 +181,12 @@ func (xs *userListImpl) Next() f.Option[UserID] {
 				return xs.curPage.Next()
 			},
 			func(err error) f.Option[UserID] {
-				log.Println("ERROR WHILE GETTING FIRST PAGE: ", err)
+				log.Println("ERROR WHILE GETTING PAGE: ", err)
 				return f.None[UserID]()
 			},
 		)
-	} else if xs.offset >= xs.total.Unwrap() {
-		return f.None[UserID]()
 	} else {
-		return i.Fold(
-			getOnePageOfUsers(xs.offset),
-			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) f.Option[UserID] {
-				xs.offset += xs.count
-				return xs.curPage.Next()
-			},
-			func(err error) f.Option[UserID] {
-				log.Println("ERROR WHILE GETTING FIRST PAGE: ", err)
-				return f.None[UserID]()
-			},
-		)
+		return f.None[UserID]()
 	}
 }
 
@@ -216,6 +206,7 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 		offset:    0,
 		total:     f.None[uint](),
 		urlParams: urlParams,
+		curPage:   s.NewStreamEmpty[UserID](),
 	}
 }
 

@@ -45,7 +45,9 @@ type findRepostImplImpl struct {
 }
 
 // TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic
+// TODO: limit extracted fields
 func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
+	// TODO: move out to flatten
 	if x := xs.curPage.Next(); x.IsSome() {
 		return x
 	}
@@ -71,7 +73,7 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 	}
 
 	log.Println("REPOST CHECK", xs.offset)
-	if xs.offset == 0 {
+	if /*xs.offset == 0*/ xs.total.IsNone() || xs.offset < xs.total.Unwrap() {
 		xs.offset += xs.count
 		return i.Fold(
 			getOnePageOfPosts(xs.offset),
@@ -81,25 +83,12 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 				return xs.curPage.Next()
 			},
 			func(err error) f.Option[WallPost] {
-				log.Println("ERROR WHILE GETTING FIRST PAGE: ", err)
+				log.Println("ERROR WHILE GETTING PAGE: ", err)
 				return f.None[WallPost]()
 			},
 		)
-	} else if xs.offset >= xs.total.Unwrap() {
-		return f.None[WallPost]()
 	} else {
-		xs.offset += xs.count
-		return i.Fold(
-			getOnePageOfPosts(xs.offset),
-			func(totalAndFirstBatch WallPosts) f.Option[WallPost] {
-				xs.offset += xs.count
-				return xs.curPage.Next()
-			},
-			func(err error) f.Option[WallPost] {
-				log.Println("ERROR WHILE GETTING FIRST PAGE: ", err)
-				return f.None[WallPost]()
-			},
-		)
+		return f.None[WallPost]()
 	}
 }
 
@@ -147,14 +136,7 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 
 	// TODO: add commenters?
 	// scan likers
-	s.ForEach(
-		client.getLikes(ownerID, postID),
-		func(userID UserID) {
-			if _, has := wasChecked[userID]; !has {
-				wasChecked[userID] = f.Unit1
-			}
-		},
-	)
+	likers := client.getLikes(ownerID, postID)
 
 	// TODO: "Error(15) Access denied: group hide members"
 	// scan group members/friends of post owner
@@ -165,7 +147,7 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 		potentialUserIDs = client.getFriends(UserID(ownerID))
 	}
 	s.ForEach(
-		potentialUserIDs,
+		s.Chain(potentialUserIDs, likers),
 		func(userID UserID) {
 			if _, has := wasChecked[userID]; !has {
 				wasChecked[userID] = f.Unit1
@@ -233,15 +215,15 @@ func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) s.Strea
 	return checkedIDs
 }
 
-func getSharers(client *VKClient, ownerId UserID, postId uint) s.Stream[UserID] {
-	reposts := getSharersAndReposts(client, ownerId, postId)
-	return s.Map(
-		reposts,
-		func(h Sharer) UserID {
-			return h.UserID
-		},
-	)
-}
+// func getSharers(client *VKClient, ownerId UserID, postId uint) s.Stream[UserID] {
+// 	reposts := getSharersAndReposts(client, ownerId, postId)
+// 	return s.Map(
+// 		reposts,
+// 		func(h Sharer) UserID {
+// 			return h.UserID
+// 		},
+// 	)
+// }
 
 type RepostersResult struct {
 	Reposts []Sharer `json:"reposts"`
