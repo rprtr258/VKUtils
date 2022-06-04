@@ -2,11 +2,12 @@ package vkutils
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 
-	f "github.com/primetalk/goio/fun"
-	i "github.com/primetalk/goio/io"
-	s "github.com/primetalk/goio/stream"
+	f "github.com/rprtr258/goflow/fun"
+	i "github.com/rprtr258/goflow/io"
+	s "github.com/rprtr258/goflow/stream"
 )
 
 type WallPost struct {
@@ -55,6 +56,7 @@ func (client *VKClient) getPosts(ownerIDString string, offset uint, countString 
 func findRepostImplImpl(client *VKClient, ownerIDString string, offset uint, total uint /*TODO: remove*/) s.Stream[s.Stream[WallPost]] {
 	var stepResultIo i.IO[s.StepResult[s.Stream[WallPost]]]
 	newOffset := offset + wallGet_count
+	log.Println("REPOST CHECK", offset)
 	if offset == 0 {
 		stepResultIo = i.Map(
 			client.getPosts(ownerIDString, offset, wallGet_countString),
@@ -211,19 +213,20 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 			)
 		},
 	)
-	slice := make([]i.IO[f.Pair[UserID, f.Either[uint, f.Unit]]], 0)
-	ioSliceIoEitherUintUnit := i.FlatMap(
-		s.AppendToSlice(a, slice),
-		i.Sequence[f.Pair[UserID, f.Either[uint, f.Unit]]],
-	)
-	v := s.FromStepResult(
-		i.FlatMap(
-			ioSliceIoEitherUintUnit,
-			func(us []f.Pair[UserID, f.Either[uint, f.Unit]]) i.IO[s.StepResult[f.Pair[UserID, f.Either[uint, f.Unit]]]] {
-				return s.FromSlice(us)
+	slice := make([]f.Pair[UserID, f.Either[uint, f.Unit]], 0)
+	ioSliceIoEitherUintUnit := s.DrainAll(
+		s.Map(
+			a,
+			func(x i.IO[f.Pair[UserID, f.Either[uint, f.Unit]]]) f.Unit {
+				xx, err := i.UnsafeRunSync(x)
+				log.Println(err)
+				slice = append(slice, xx)
+				return f.Unit1
 			},
 		),
 	)
+	log.Println(i.UnsafeRunSync(ioSliceIoEitherUintUnit))
+	v := s.FromSlice(slice)
 	vv := s.Filter(
 		v,
 		func(x f.Pair[UserID, f.Either[uint, f.Unit]]) bool {

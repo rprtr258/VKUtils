@@ -5,8 +5,8 @@ github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANyt
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
-github.com/primetalk/goio v0.1.4 h1:DESNgdKjnfJa04sFsQOvz80alztNdG9Dl9z+oMTyVfY=
-github.com/primetalk/goio v0.1.4/go.mod h1:Ls3u+wcwDYa7/3GurOjcRZoJ5PXrwfks/cHXUyjoNtI=
+github.com/rprtr258/goflow v0.0.0-20220604084927-f10758d39490 h1:8kgqX54DaV0ruaFMyzRbfI/X1ZTceGMJWrrdlpEvhBU=
+github.com/rprtr258/goflow v0.0.0-20220604084927-f10758d39490/go.mod h1:Fr5AQDTV4BYo7IuqqC3PfZqKs7RjGirY8LQXeowx1wM=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/spf13/cobra v1.4.0 h1:y+wJpx64xcgO1V+RcnwW0LEHxTKRi2ZDPSBjWnrg88Q=
 github.com/spf13/cobra v1.4.0/go.mod h1:Wo4iy3BUC+X2Fybo0PDqwJIv3dNRiZLHQymsfxlB84g=

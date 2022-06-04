@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/pkg/errors"
-	f "github.com/primetalk/goio/fun"
-	i "github.com/primetalk/goio/io"
-	s "github.com/primetalk/goio/stream"
+	f "github.com/rprtr258/goflow/fun"
+	i "github.com/rprtr258/goflow/io"
+	s "github.com/rprtr258/goflow/stream"
 )
 
 type UserID int
@@ -46,7 +47,7 @@ const (
 // application constants
 const (
 	api_version         = "5.131"
-	API_REQUEST_RETRIES = 100
+	API_REQUEST_RETRIES = 1 //00 // TODO: fix stack overflow
 	WAIT_TIME_TO_RETRY  = time.Millisecond * 500
 )
 
@@ -156,6 +157,7 @@ func getUserListImplImpl(client *VKClient, method string, params url.Values, cou
 func getUserListImpl(client *VKClient, method string, params url.Values, count uint, countString string, offset uint, total uint, urlParams url.Values) s.Stream[s.Stream[UserID]] {
 	var stepResultIo i.IO[s.StepResult[s.Stream[UserID]]]
 	newOffset := offset + count
+	log.Println("GET USER LIST", offset)
 	if offset == 0 {
 		stepResultIo = i.Map(
 			getUserListImplImpl(client, method, params, countString, newOffset, urlParams),
