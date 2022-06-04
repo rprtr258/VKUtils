@@ -52,7 +52,7 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 		return x
 	}
 
-	getOnePageOfPosts := func(offset uint) i.IO[WallPosts] {
+	getOnePageOfPosts := func(offset uint) i.Result[WallPosts] {
 		body := apiRequest(xs.client, "wall.get", url.Values{
 			"owner_id": []string{xs.ownerIDString},
 			"offset":   []string{fmt.Sprint(offset)},

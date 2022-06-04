@@ -67,7 +67,7 @@ func (err *VkError) Error() string {
 	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
 }
 
-func jsonUnmarshall[J any](body []byte) i.IO[J] {
+func jsonUnmarshall[J any](body []byte) i.Result[J] {
 	return i.Eval(func() (J, error) {
 		var v J
 		err := json.Unmarshal(body, &v)
@@ -132,7 +132,7 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 	return
 }
 
-func apiRequest(client *VKClient, method string, params url.Values) i.IO[[]byte] {
+func apiRequest(client *VKClient, method string, params url.Values) i.Result[[]byte] {
 	return i.Eval(func() ([]byte, error) {
 		return client.apiRequestRaw(method, params)
 	})
@@ -156,7 +156,7 @@ func (xs *userListImpl) Next() f.Option[UserID] {
 	}
 
 	// TODO: returns total and stream, make better interface (how?)
-	getOnePageOfUsers := func(offset uint) i.IO[f.Pair[uint, s.Stream[UserID]]] {
+	getOnePageOfUsers := func(offset uint) i.Result[f.Pair[uint, s.Stream[UserID]]] {
 		xs.urlParams.Set("offset", fmt.Sprint(offset))
 		body := apiRequest(xs.client, xs.method, xs.urlParams)
 		userList := i.FlatMap(body, jsonUnmarshall[UserList])
@@ -240,7 +240,7 @@ func (p PostHiddenErr) Error() string {
 	return fmt.Sprintf("Post %d_%d is hidden", p.Owner, p.ID)
 }
 
-func (client *VKClient) getPostTime(post Post) i.IO[uint] {
+func (client *VKClient) getPostTime(post Post) i.Result[uint] {
 	body := apiRequest(client, "wall.getById", url.Values{
 		"posts": []string{fmt.Sprintf("%d_%d", post.Owner, post.ID)},
 	})
@@ -255,7 +255,7 @@ func (client *VKClient) getPostTime(post Post) i.IO[uint] {
 	userList := i.FlatMap(body, jsonUnmarshall[V])
 	return i.FlatMap(
 		userList,
-		func(v V) i.IO[uint] {
+		func(v V) i.Result[uint] {
 			if len(v.Response) != 1 {
 				return i.Fail[uint](PostHiddenErr{&post})
 			} else {
