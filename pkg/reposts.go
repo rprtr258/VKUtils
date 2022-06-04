@@ -19,6 +19,7 @@ type WallPost struct {
 	} `json:"copy_history"`
 }
 
+// TODO: replace with f.Pair[uint, s.Stream[WallPost]]
 type WallPosts struct {
 	Response struct {
 		Count uint       `json:"count"`
@@ -32,128 +33,126 @@ const (
 	USER_CHECK_REPOSTS_THREADS = 10
 )
 
-func (client *VKClient) getPosts(ownerIDString string, offset uint, countString string) i.IO[WallPosts] {
-	body := apiRequest(client, "wall.get", url.Values{
-		"owner_id": []string{ownerIDString},
-		"offset":   []string{fmt.Sprint(offset)},
-		"count":    []string{countString},
-	})
-	v := i.FlatMap(body, jsonUnmarshall[WallPosts])
-	// v = Recover(v, func(err error) IO[WallPosts] {
-	// 	errMsg := err.Error()
-	// 	// TODO: change to error structs?
-	// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
-	// 		errMsg == "Error(18) User was deleted or banned" ||
-	// 		errMsg == "Error(30) This profile is private" {
-	// 		return Lift[Repost](NOT_FOUND_REPOST)
-	// 	}
-	// 	return Fail[Repost](err)
-	// })
-	return v
+type findRepostImplImpl struct {
+	client        *VKClient
+	ownerIDString string
+	offset        uint
+	total         f.Option[uint]
+	countString   string // TODO: remove to urlValues?
+	count         uint
+
+	curPage s.Stream[WallPost]
 }
 
 // TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic
-func findRepostImplImpl(client *VKClient, ownerIDString string, offset uint, total uint /*TODO: remove*/) s.Stream[s.Stream[WallPost]] {
-	var StreamIo i.IO[s.Stream[s.Stream[WallPost]]]
-	newOffset := offset + wallGet_count
-	log.Println("REPOST CHECK", offset)
-	if offset == 0 {
-		StreamIo = i.Map(
-			client.getPosts(ownerIDString, offset, wallGet_countString),
-			func(ws WallPosts) s.Stream[s.Stream[WallPost]] {
-				return s.NewStream(
-					s.FromSlice(ws.Response.Items),
-					findRepostImplImpl(client, ownerIDString, newOffset, ws.Response.Count),
-				)
+func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
+	if x := xs.curPage.Next(); x.IsSome() {
+		return x
+	}
+
+	getOnePageOfPosts := func(offset uint) i.IO[WallPosts] {
+		body := apiRequest(xs.client, "wall.get", url.Values{
+			"owner_id": []string{xs.ownerIDString},
+			"offset":   []string{fmt.Sprint(offset)},
+			"count":    []string{xs.countString},
+		})
+		v := i.FlatMap(body, jsonUnmarshall[WallPosts])
+		// v = Recover(v, func(err error) IO[WallPosts] {
+		// 	errMsg := err.Error()
+		// 	// TODO: change to error structs?
+		// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
+		// 		errMsg == "Error(18) User was deleted or banned" ||
+		// 		errMsg == "Error(30) This profile is private" {
+		// 		return Lift[Repost](NOT_FOUND_REPOST)
+		// 	}
+		// 	return Fail[Repost](err)
+		// })
+		return v
+	}
+
+	log.Println("REPOST CHECK", xs.offset)
+	if xs.offset == 0 {
+		xs.offset += xs.count
+		return i.Fold(
+			getOnePageOfPosts(xs.offset),
+			func(totalAndFirstBatch WallPosts) f.Option[WallPost] {
+				xs.offset += xs.count
+				xs.total, xs.curPage = f.Some(totalAndFirstBatch.Response.Count), s.FromSlice(totalAndFirstBatch.Response.Items)
+				return xs.curPage.Next()
+			},
+			func(err error) f.Option[WallPost] {
+				log.Println("ERROR WHILE GETTING FIRST PAGE: ", err)
+				return f.None[WallPost]()
 			},
 		)
-	} else if offset >= total {
-		StreamIo = i.Lift(s.NewStreamFinished[s.Stream[WallPost]]())
+	} else if xs.offset >= xs.total.Unwrap() {
+		return f.None[WallPost]()
 	} else {
-		StreamIo = i.Map(
-			client.getPosts(ownerIDString, newOffset, wallGet_countString),
-			func(ws WallPosts) s.Stream[s.Stream[WallPost]] {
-				return s.NewStream(
-					s.FromSlice(ws.Response.Items),
-					findRepostImplImpl(client, ownerIDString, newOffset, ws.Response.Count),
-				)
+		xs.offset += xs.count
+		return i.Fold(
+			getOnePageOfPosts(xs.offset),
+			func(totalAndFirstBatch WallPosts) f.Option[WallPost] {
+				xs.offset += xs.count
+				return xs.curPage.Next()
+			},
+			func(err error) f.Option[WallPost] {
+				log.Println("ERROR WHILE GETTING FIRST PAGE: ", err)
+				return f.None[WallPost]()
 			},
 		)
 	}
-	return s.FromStream(StreamIo)
 }
 
 func findRepostImpl(client *VKClient, ownerIDString string) s.Stream[WallPost] {
-	vv := findRepostImplImpl(client, ownerIDString, 0, 0)
-	return s.Flatten(vv)
+	return &findRepostImplImpl{
+		client:        client,
+		ownerIDString: ownerIDString,
+		offset:        0,
+		total:         f.None[uint](),
+		count:         wallGet_count,
+		countString:   fmt.Sprint(wallGet_count),
+		curPage:       s.NewStreamEmpty[WallPost](),
+	}
 }
 
-func TakeWhile[A any](sa s.Stream[A], p func(A) bool) s.Stream[A] {
-	return s.FromStream(i.Map[s.Stream[A]](
-		sa,
-		func(a s.Stream[A]) s.Stream[A] {
-			if p(a.Value) {
-				cont := TakeWhile(a.Continuation, p)
-				return s.NewStream(a.Value, cont)
-			} else {
-				return s.NewStreamFinished[A]()
-			}
-		},
-	))
-}
-
-func isPostRepost(post WallPost, origPost Post) bool {
-	copyHistory := post.CopyHistory
-	return len(copyHistory) != 0 && copyHistory[0].PostID == origPost.ID && copyHistory[0].OwnerID == origPost.Owner
-}
-
-// Returns either found repost or unit signalling that it was not found
+// Returns either found (or not found) repost's post id
 // TODO: binary search?
-func findRepost(client *VKClient, userID UserID, post Post) i.IO[f.Either[uint, f.Unit]] {
+func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
 	ownerIDString := fmt.Sprint(userID)
-	swp := findRepostImpl(client, ownerIDString)
-	pinnedPost := s.Head(swp)
-	return i.FlatMap(
-		pinnedPost,
-		func(w WallPost) i.IO[f.Either[uint, f.Unit]] {
-			if isPostRepost(w, post) {
-				return i.Lift(f.Left[uint, f.Unit](w.PostID))
-			} else {
-				ss := TakeWhile(
-					swp,
-					func(w WallPost) bool {
-						return w.Date >= post.Date
-					},
-				)
-				ss = s.Filter(ss, func(ww WallPost) bool {
-					return isPostRepost(ww, post)
-				})
-				return i.Fold(
-					s.Head(ss),
-					func(www WallPost) i.IO[f.Either[uint, f.Unit]] {
-						return i.Lift(f.Left[uint, f.Unit](www.PostID))
-					},
-					func(e error) i.IO[f.Either[uint, f.Unit]] {
-						return i.Lift(f.Right[uint](f.Unit1))
-					},
-				)
-			}
+	allPosts := findRepostImpl(client, ownerIDString)
+	pinnedPostMaybe := s.Head(allPosts)
+	if pinnedPostMaybe.IsNone() {
+		return f.None[uint]()
+	}
+	pinnedPost := pinnedPostMaybe.Unwrap()
+	isRepostPredicate := func(post WallPost) bool {
+		copyHistory := post.CopyHistory
+		return len(copyHistory) != 0 && copyHistory[0].PostID == origPost.ID && copyHistory[0].OwnerID == origPost.Owner
+	}
+	if isRepostPredicate(pinnedPost) {
+		return f.Some(pinnedPost.PostID)
+	}
+	remainingPosts := s.TakeWhile(
+		allPosts,
+		func(w WallPost) bool {
+			return w.Date >= origPost.Date
 		},
 	)
+	repostMaybe := s.Find(remainingPosts, isRepostPredicate)
+	return f.Map(repostMaybe, func(w WallPost) uint { return w.PostID })
 }
 
 func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID] {
-	wasChecked := make(map[UserID]struct{})
+	wasChecked := make(f.Set[UserID])
 
 	// TODO: add commenters?
 	// scan likers
-	likersIo := s.Collect(
+	s.ForEach(
 		client.getLikes(ownerID, postID),
-		func(userID UserID) error {
+		func(userID UserID) {
 			if _, has := wasChecked[userID]; !has {
-				wasChecked[userID] = struct{}{}
+				wasChecked[userID] = f.Unit1
 			}
-			return nil
 		},
 	)
 
@@ -165,31 +164,16 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 	} else { // owner is user
 		potentialUserIDs = client.getFriends(UserID(ownerID))
 	}
-	potentialUsersIo := s.Collect(
+	s.ForEach(
 		potentialUserIDs,
-		func(userID UserID) error {
+		func(userID UserID) {
 			if _, has := wasChecked[userID]; !has {
-				wasChecked[userID] = struct{}{}
+				wasChecked[userID] = f.Unit1
 			}
-			return nil
 		},
 	)
 
-	return i.FlatMap(
-		likersIo,
-		func(_ f.Unit) i.IO[s.Stream[UserID]] {
-			return i.FlatMap(
-				potentialUsersIo,
-				func(_ f.Unit) i.IO[s.Stream[UserID]] {
-					slice := make([]UserID, 0, len(wasChecked))
-					for k := range wasChecked {
-						slice = append(slice, k)
-					}
-					return s.FromSlice(slice)
-				},
-			)
-		},
-	)
+	return s.FromSet(wasChecked)
 }
 
 // TODO: does it need to have json tags?
@@ -204,39 +188,25 @@ type Sharer struct {
 func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[Sharer] {
 	a := s.Map(
 		userIDs,
-		func(userID UserID) i.IO[f.Pair[UserID, f.Either[uint, f.Unit]]] {
-			return i.Map(
-				findRepost(client, userID, post),
-				func(x f.Either[uint, f.Unit]) f.Pair[UserID, f.Either[uint, f.Unit]] {
-					return f.NewPair(userID, x)
-				},
-			)
+		func(userID UserID) f.Pair[UserID, f.Option[uint]] {
+			return f.NewPair(userID, findRepost(client, userID, post))
 		},
 	)
-	slice := make([]f.Pair[UserID, f.Either[uint, f.Unit]], 0)
-	ioSliceIoEitherUintUnit := s.DrainAll(
-		s.Map(
-			a,
-			func(x i.IO[f.Pair[UserID, f.Either[uint, f.Unit]]]) f.Unit {
-				xx, err := i.UnsafeRunSync(x)
-				log.Println(err)
-				slice = append(slice, xx)
-				return f.Unit1
-			},
-		),
-	)
-	log.Println(i.UnsafeRunSync(ioSliceIoEitherUintUnit))
+	slice := s.CollectToSlice(a)
 	v := s.FromSlice(slice)
 	vv := s.Filter(
 		v,
-		func(x f.Pair[UserID, f.Either[uint, f.Unit]]) bool {
-			return f.IsLeft(x.V2)
+		func(x f.Pair[UserID, f.Option[uint]]) bool {
+			return x.Right.IsSome()
 		},
 	)
 	return s.Map(
 		vv,
-		func(leftSurely f.Pair[UserID, f.Either[uint, f.Unit]]) Sharer {
-			return Sharer{leftSurely.V1, int(leftSurely.V2.Left)}
+		func(leftSurely f.Pair[UserID, f.Option[uint]]) Sharer {
+			return Sharer{
+				UserID:   leftSurely.Left,
+				RepostID: int(leftSurely.Right.Unwrap()),
+			}
 		},
 	)
 }
@@ -275,7 +245,7 @@ func getSharers(client *VKClient, ownerId UserID, postId uint) s.Stream[UserID] 
 
 type RepostersResult struct {
 	Reposts []Sharer `json:"reposts"`
-	Errs    []string `json:"errors"`
+	// Errs    []string `json:"errors"`
 }
 
 func parsePostUrl(url string) (ownerId UserID, postId uint) {
@@ -288,18 +258,13 @@ func GetRepostersByPostUrl(client *VKClient, postUrl string) RepostersResult {
 	sharers := getSharersAndReposts(client, ownerId, postId)
 	res := RepostersResult{
 		make([]Sharer, 0),
-		make([]string, 0),
+		// make([]string, 0),
 	}
-	uuu := s.Collect(
+	s.ForEach(
 		sharers,
-		func(share Sharer) error {
+		func(share Sharer) {
 			res.Reposts = append(res.Reposts, share)
-			return nil
 		},
 	)
-	_, err := i.UnsafeRunSync(uuu)
-	if err != nil {
-		res.Errs = append(res.Errs, err.Error())
-	}
 	return res
 }

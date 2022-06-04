@@ -136,53 +136,68 @@ func apiRequest(client *VKClient, method string, params url.Values) i.IO[[]byte]
 	})
 }
 
-// TODO: returns total and stream, make better interface (how?)
-func getUserListImplImpl(client *VKClient, method string, params url.Values, countString string, offset uint, urlParams url.Values) i.IO[f.Pair[uint, s.Stream[UserID]]] {
-	urlParams.Set("offset", fmt.Sprint(offset))
-	urlParams.Set("count", countString)
-	body := apiRequest(client, method, urlParams)
-	userList := i.FlatMap(body, jsonUnmarshall[UserList])
-	return i.Map(
-		userList,
-		func(v UserList) f.Pair[uint, s.Stream[UserID]] {
-			return f.NewPair(
-				v.Response.Count,
-				s.FromSlice(v.Response.Items),
-			)
-		},
-	)
+type userListImpl struct {
+	client    *VKClient
+	method    string
+	params    url.Values
+	count     uint
+	offset    uint
+	total     f.Option[uint]
+	urlParams url.Values
+
+	curPage s.Stream[UserID]
 }
 
-// TODO: rewrite to loop?
-func getUserListImpl(client *VKClient, method string, params url.Values, count uint, countString string, offset uint, total uint, urlParams url.Values) s.Stream[s.Stream[UserID]] {
-	var StreamIo i.IO[s.Stream[s.Stream[UserID]]]
-	newOffset := offset + count
-	log.Println("GET USER LIST", offset)
-	if offset == 0 {
-		StreamIo = i.Map(
-			getUserListImplImpl(client, method, params, countString, newOffset, urlParams),
-			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) s.Stream[s.Stream[UserID]] {
-				total, firstBatch := totalAndFirstBatch.V1, totalAndFirstBatch.V2
-				return s.NewStream(
-					firstBatch,
-					getUserListImpl(client, method, params, count, countString, newOffset, total, urlParams),
-				)
-			},
-		)
-	} else if offset >= total {
-		StreamIo = i.Lift(s.NewStreamFinished[s.Stream[UserID]]())
-	} else {
-		StreamIo = i.Map(
-			getUserListImplImpl(client, method, params, countString, newOffset, urlParams),
-			func(somethingAndFirstBatch f.Pair[uint, s.Stream[UserID]]) s.Stream[s.Stream[UserID]] {
-				return s.NewStream(
-					somethingAndFirstBatch.V2,
-					getUserListImpl(client, method, params, count, countString, newOffset, total, urlParams),
+func (xs *userListImpl) Next() f.Option[UserID] {
+	if x := xs.curPage.Next(); x.IsSome() {
+		return x
+	}
+
+	// TODO: returns total and stream, make better interface (how?)
+	getOnePageOfUsers := func(offset uint) i.IO[f.Pair[uint, s.Stream[UserID]]] {
+		xs.urlParams.Set("offset", fmt.Sprint(offset))
+		body := apiRequest(xs.client, xs.method, xs.urlParams)
+		userList := i.FlatMap(body, jsonUnmarshall[UserList])
+		return i.Map(
+			userList,
+			func(v UserList) f.Pair[uint, s.Stream[UserID]] {
+				return f.NewPair(
+					v.Response.Count,
+					s.FromSlice(v.Response.Items),
 				)
 			},
 		)
 	}
-	return s.FromStream(StreamIo)
+
+	log.Println("GET USER LIST", xs.offset)
+	if xs.offset == 0 {
+		return i.Fold(
+			getOnePageOfUsers(xs.offset),
+			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) f.Option[UserID] {
+				xs.offset += xs.count
+				xs.total, xs.curPage = f.Some(totalAndFirstBatch.Left), totalAndFirstBatch.Right
+				return xs.curPage.Next()
+			},
+			func(err error) f.Option[UserID] {
+				log.Println("ERROR WHILE GETTING FIRST PAGE: ", err)
+				return f.None[UserID]()
+			},
+		)
+	} else if xs.offset >= xs.total.Unwrap() {
+		return f.None[UserID]()
+	} else {
+		return i.Fold(
+			getOnePageOfUsers(xs.offset),
+			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) f.Option[UserID] {
+				xs.offset += xs.count
+				return xs.curPage.Next()
+			},
+			func(err error) f.Option[UserID] {
+				log.Println("ERROR WHILE GETTING FIRST PAGE: ", err)
+				return f.None[UserID]()
+			},
+		)
+	}
 }
 
 // TODO: merge method and count in one structure
@@ -192,7 +207,16 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 	for k, v := range params {
 		urlParams[k] = v
 	}
-	return s.Flatten(getUserListImpl(client, method, params, count, countString, 0, 42 /*TODO: remove*/, urlParams))
+	urlParams.Set("count", countString)
+	return &userListImpl{
+		client:    client,
+		method:    method,
+		params:    params,
+		count:     count,
+		offset:    0,
+		total:     f.None[uint](),
+		urlParams: urlParams,
+	}
 }
 
 // TODO: group id is groupid, user id is userid
@@ -244,7 +268,7 @@ func (client *VKClient) getPostTime(post Post) i.IO[uint] {
 			if len(v.Response) != 1 {
 				return i.Fail[uint](PostHiddenErr{&post})
 			} else {
-				return i.Lift(v.Response[0].Date)
+				return i.Success(v.Response[0].Date)
 			}
 		},
 	)
