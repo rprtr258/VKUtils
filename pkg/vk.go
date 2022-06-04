@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	f "github.com/rprtr258/goflow/fun"
-	i "github.com/rprtr258/goflow/io"
-	s "github.com/rprtr258/goflow/stream"
+	f "github.com/rprtr258/vk-utils/flow/fun"
+	i "github.com/rprtr258/vk-utils/flow/io"
+	s "github.com/rprtr258/vk-utils/flow/stream"
 )
 
 type UserID int
@@ -155,34 +155,34 @@ func getUserListImplImpl(client *VKClient, method string, params url.Values, cou
 
 // TODO: rewrite to loop?
 func getUserListImpl(client *VKClient, method string, params url.Values, count uint, countString string, offset uint, total uint, urlParams url.Values) s.Stream[s.Stream[UserID]] {
-	var stepResultIo i.IO[s.StepResult[s.Stream[UserID]]]
+	var StreamIo i.IO[s.Stream[s.Stream[UserID]]]
 	newOffset := offset + count
 	log.Println("GET USER LIST", offset)
 	if offset == 0 {
-		stepResultIo = i.Map(
+		StreamIo = i.Map(
 			getUserListImplImpl(client, method, params, countString, newOffset, urlParams),
-			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) s.StepResult[s.Stream[UserID]] {
+			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) s.Stream[s.Stream[UserID]] {
 				total, firstBatch := totalAndFirstBatch.V1, totalAndFirstBatch.V2
-				return s.NewStepResult(
+				return s.NewStream(
 					firstBatch,
 					getUserListImpl(client, method, params, count, countString, newOffset, total, urlParams),
 				)
 			},
 		)
 	} else if offset >= total {
-		stepResultIo = i.Lift(s.NewStepResultFinished[s.Stream[UserID]]())
+		StreamIo = i.Lift(s.NewStreamFinished[s.Stream[UserID]]())
 	} else {
-		stepResultIo = i.Map(
+		StreamIo = i.Map(
 			getUserListImplImpl(client, method, params, countString, newOffset, urlParams),
-			func(somethingAndFirstBatch f.Pair[uint, s.Stream[UserID]]) s.StepResult[s.Stream[UserID]] {
-				return s.NewStepResult(
+			func(somethingAndFirstBatch f.Pair[uint, s.Stream[UserID]]) s.Stream[s.Stream[UserID]] {
+				return s.NewStream(
 					somethingAndFirstBatch.V2,
 					getUserListImpl(client, method, params, count, countString, newOffset, total, urlParams),
 				)
 			},
 		)
 	}
-	return s.FromStepResult(stepResultIo)
+	return s.FromStream(StreamIo)
 }
 
 // TODO: merge method and count in one structure

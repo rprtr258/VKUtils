@@ -5,9 +5,9 @@ import (
 	"log"
 	"net/url"
 
-	f "github.com/rprtr258/goflow/fun"
-	i "github.com/rprtr258/goflow/io"
-	s "github.com/rprtr258/goflow/stream"
+	f "github.com/rprtr258/vk-utils/flow/fun"
+	i "github.com/rprtr258/vk-utils/flow/io"
+	s "github.com/rprtr258/vk-utils/flow/stream"
 )
 
 type WallPost struct {
@@ -54,33 +54,33 @@ func (client *VKClient) getPosts(ownerIDString string, offset uint, countString 
 
 // TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic
 func findRepostImplImpl(client *VKClient, ownerIDString string, offset uint, total uint /*TODO: remove*/) s.Stream[s.Stream[WallPost]] {
-	var stepResultIo i.IO[s.StepResult[s.Stream[WallPost]]]
+	var StreamIo i.IO[s.Stream[s.Stream[WallPost]]]
 	newOffset := offset + wallGet_count
 	log.Println("REPOST CHECK", offset)
 	if offset == 0 {
-		stepResultIo = i.Map(
+		StreamIo = i.Map(
 			client.getPosts(ownerIDString, offset, wallGet_countString),
-			func(ws WallPosts) s.StepResult[s.Stream[WallPost]] {
-				return s.NewStepResult(
+			func(ws WallPosts) s.Stream[s.Stream[WallPost]] {
+				return s.NewStream(
 					s.FromSlice(ws.Response.Items),
 					findRepostImplImpl(client, ownerIDString, newOffset, ws.Response.Count),
 				)
 			},
 		)
 	} else if offset >= total {
-		stepResultIo = i.Lift(s.NewStepResultFinished[s.Stream[WallPost]]())
+		StreamIo = i.Lift(s.NewStreamFinished[s.Stream[WallPost]]())
 	} else {
-		stepResultIo = i.Map(
+		StreamIo = i.Map(
 			client.getPosts(ownerIDString, newOffset, wallGet_countString),
-			func(ws WallPosts) s.StepResult[s.Stream[WallPost]] {
-				return s.NewStepResult(
+			func(ws WallPosts) s.Stream[s.Stream[WallPost]] {
+				return s.NewStream(
 					s.FromSlice(ws.Response.Items),
 					findRepostImplImpl(client, ownerIDString, newOffset, ws.Response.Count),
 				)
 			},
 		)
 	}
-	return s.FromStepResult(stepResultIo)
+	return s.FromStream(StreamIo)
 }
 
 func findRepostImpl(client *VKClient, ownerIDString string) s.Stream[WallPost] {
@@ -89,14 +89,14 @@ func findRepostImpl(client *VKClient, ownerIDString string) s.Stream[WallPost] {
 }
 
 func TakeWhile[A any](sa s.Stream[A], p func(A) bool) s.Stream[A] {
-	return s.FromStepResult(i.Map[s.StepResult[A]](
+	return s.FromStream(i.Map[s.Stream[A]](
 		sa,
-		func(a s.StepResult[A]) s.StepResult[A] {
+		func(a s.Stream[A]) s.Stream[A] {
 			if p(a.Value) {
 				cont := TakeWhile(a.Continuation, p)
-				return s.NewStepResult(a.Value, cont)
+				return s.NewStream(a.Value, cont)
 			} else {
-				return s.NewStepResultFinished[A]()
+				return s.NewStreamFinished[A]()
 			}
 		},
 	))
@@ -177,10 +177,10 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 
 	return i.FlatMap(
 		likersIo,
-		func(_ f.Unit) i.IO[s.StepResult[UserID]] {
+		func(_ f.Unit) i.IO[s.Stream[UserID]] {
 			return i.FlatMap(
 				potentialUsersIo,
-				func(_ f.Unit) i.IO[s.StepResult[UserID]] {
+				func(_ f.Unit) i.IO[s.Stream[UserID]] {
 					slice := make([]UserID, 0, len(wasChecked))
 					for k := range wasChecked {
 						slice = append(slice, k)
