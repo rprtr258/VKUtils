@@ -130,28 +130,32 @@ func Sum[A slice.Number](xs Stream[A]) A {
 	)
 }
 
-// // Len is a pipe that returns a stream of 1 element that is the count of elements of the original stream.
-// func Len[A any](sa Stream[A]) Stream[int] {
-// 	return Sum(Map(sa, fun.Const[A](1)))
-// }
+type chunkedImpl[A any] struct {
+	Stream[A]
+	chunkSize int
+}
 
-// // ChunkN groups elements by n and produces a stream of slices.
-// func ChunkN[A any](n int) func(sa Stream[A]) Stream[[]A] {
-// 	return func(sa Stream[A]) Stream[[]A] {
-// 		return StateFlatMapWithFinish(sa, make([]A, 0, n),
-// 			func(a A, as []A) io.IO[fun.Pair[[]A, Stream[[]A]]] {
-// 				if len(as) == n-1 {
-// 					return io.Lift(fun.NewPair(make([]A, 0, n), Lift(append(as, a))))
-// 				} else {
-// 					return io.Lift(fun.NewPair(append(as, a), Empty[[]A]()))
-// 				}
-// 			},
-// 			func(as []A) Stream[[]A] {
-// 				return Lift(as)
-// 			},
-// 		)
-// 	}
-// }
+func (xs *chunkedImpl[A]) Next() fun.Option[[]A] {
+	x := xs.Stream.Next()
+	if x.IsNone() {
+		return fun.None[[]A]()
+	}
+	chunk := make([]A, 1, xs.chunkSize)
+	chunk[0] = x.Unwrap()
+	for i := 1; i < xs.chunkSize; i++ {
+		x := xs.Stream.Next()
+		if x.IsNone() {
+			break
+		}
+		chunk = append(chunk, x.Unwrap())
+	}
+	return fun.Some(chunk)
+}
+
+// Chunked groups elements by n and produces a stream of slices.
+func Chunked[A any](xs Stream[A], n int) Stream[[]A] {
+	return &chunkedImpl[A]{xs, n}
+}
 
 // // Fail returns a stream that fails immediately.
 // func Fail[A any](err error) Stream[A] {
@@ -284,7 +288,7 @@ func TakeWhile[A any](xs Stream[A], p func(A) bool) Stream[A] {
 // DebugPrint prints every processed element, without changing it.
 func DebugPrint[A any](prefix string, xs Stream[A]) Stream[A] {
 	return Map(xs, func(a A) A {
-		log.Println(prefix, ' ', a)
+		log.Println(prefix, " ", a)
 		return a
 	})
 }

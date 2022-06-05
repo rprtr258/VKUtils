@@ -2,8 +2,6 @@
 package stream
 
 import (
-	// 	"fmt"
-
 	"github.com/rprtr258/vk-utils/flow/fun"
 )
 
@@ -36,4 +34,9 @@ func Reduce[A, B any](start A, op func(A, B) A, xs Stream[B]) A {
 		start = op(start, x.Unwrap())
 	}
 	return start
+}
+
+// Count consumes stream and returns it's length.
+func Count[A any](xs Stream[A]) int {
+	return Sum(Map(xs, fun.Const[A](1)))
 }

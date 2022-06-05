@@ -7,8 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func nats() Stream[int] {
+	return Generate(0, func(s int) int { return s + 1 })
+}
+
 func nats10() Stream[int] {
-	return Take(Generate(0, func(s int) int { return s + 1 }), 10)
+	return Take(nats(), 10)
 }
 
 var mul2 = func(i int) int { return i * 2 }
@@ -45,36 +49,23 @@ func TestSum(t *testing.T) {
 	assert.Equal(t, 45, sum)
 }
 
-// func TestFlatMapPipe(t *testing.T) {
-// 	natsRepeated := FlatMapPipe(func(i int) Stream[int] {
-// 		return MapPipe(func(j int) int {
-// 			return i + j
-// 		})(nats10)
-// 	})(nats10)
+func TestFlatMapPipe(t *testing.T) {
+	pipe := FlatMapPipe(func(i int) Stream[int] {
+		return Map(nats10(), func(j int) int {
+			return i + j
+		})
+	})
+	sum := Sum(Filter(pipe(nats10()), func(i int) bool {
+		return i%2 == 0
+	}))
+	assert.Equal(t, 450, sum)
+}
 
-// 	ioLen := Head(Len(natsRepeated))
-// 	len, err := io.UnsafeRunSync(ioLen)
-// 	assert.NoError(t, err)
-// 	assert.Equal(t, 100, len)
-
-// 	filtered := Filter(natsRepeated, func(i int) bool {
-// 	return i%2 == 0
-// })
-// 	sumStream := Sum(filtered)
-// 	ioSum := Head(sumStream)
-// 	var sum int
-// 	sum, err = io.UnsafeRunSync(ioSum)
-// 	assert.NoError(t, err)
-// 	assert.Equal(t, 550, sum)
-// }
-
-// func TestChunks(t *testing.T) {
-// 	natsBy10 := ChunkN[int](10)(Take(nats, 19))
-// 	nats10to19IO := Head(Drop(natsBy10, 1))
-// 	nats10to19, err := io.UnsafeRunSync(nats10to19IO)
-// 	assert.NoError(t, err)
-// 	assert.ElementsMatch(t, []int{11, 12, 13, 14, 15, 16, 17, 18, 19}, nats10to19)
-// }
+func TestChunks(t *testing.T) {
+	natsBy10 := Chunked(Take(nats(), 19), 10)
+	nats10to19 := Head(Drop(natsBy10, 1)).Unwrap()
+	assert.ElementsMatch(t, []int{10, 11, 12, 13, 14, 15, 16, 17, 18}, nats10to19)
+}
 
 // func TestForEach(t *testing.T) {
 // 	powers2 := Generate(1, mul2)
