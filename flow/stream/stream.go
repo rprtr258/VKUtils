@@ -1,6 +1,4 @@
-// Package stream provides a way to construct data processing streams
-// from smaller pieces.
-// The design is inspired by fs2 Scala library.
+// Package stream provides a way to construct data processing streams from smaller pieces.
 package stream
 
 import (
@@ -14,14 +12,6 @@ import (
 type Stream[A any] interface {
 	// Next gives either value or nothing if stream has ended.
 	Next() fun.Option[A]
-}
-
-// NewStream returns new Stream and function to close it.
-func NewStream[A any]() (Stream[A], func()) {
-	ch := make(chan A)
-	return chanStream[A](ch), func() {
-		close(ch)
-	}
 }
 
 type mapImpl[A, B any] struct {

@@ -1,21 +1,18 @@
 package stream
 
-// import (
-// 	"testing"
+import (
+	"testing"
 
-// 	"github.com/rprtr258/goflow/fun"
-// 	"github.com/rprtr258/goflow/io"
-// 	"github.com/stretchr/testify/assert"
-// )
+	// 	"github.com/rprtr258/goflow/fun"
 
-// func TestSendingDataThroughChannel(t *testing.T) {
-// 	ch := make(chan int)
-// 	pipe := PairOfChannelsToPipe(ch, ch)
-// 	nats10After := Through(nats10, pipe)
-// 	results, err := io.UnsafeRunSync(ToSlice(nats10After))
-// 	assert.NoError(t, err)
-// 	assert.ElementsMatch(t, results, nats10Values)
-// }
+	"github.com/stretchr/testify/assert"
+)
+
+func TestSendingDataThroughChannel(t *testing.T) {
+	ch := make(chan int)
+	results := CollectToSlice(FromPairOfChannels(nats10(), ch, ch))
+	assert.ElementsMatch(t, results, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+}
 
 // func TestStreamConversion(t *testing.T) {
 // 	io2 := io.ForEach(pipeMul2IO, func(pair fun.Pair[chan<- int, <-chan int]) {

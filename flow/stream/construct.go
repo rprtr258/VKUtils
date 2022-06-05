@@ -67,14 +67,3 @@ func (xs *emptyImpl[A]) Next() fun.Option[A] {
 func NewStreamEmpty[A any]() Stream[A] {
 	return &emptyImpl[A]{}
 }
-
-// TODO: fix blocking
-type chanStream[A any] <-chan A
-
-func (s chanStream[A]) Next() fun.Option[A] {
-	val, isClosed := <-s
-	if isClosed {
-		return fun.None[A]()
-	}
-	return fun.Some(val)
-}

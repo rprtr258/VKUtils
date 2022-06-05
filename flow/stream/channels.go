@@ -1,72 +1,55 @@
 package stream
 
-// import (
-// 	"github.com/rprtr258/goflow/fun"
-// 	"github.com/rprtr258/goflow/io"
-// )
+import (
+	"github.com/rprtr258/vk-utils/flow/fun"
+)
 
-// // ToChannel sends all stream elements to the given channel.
-// // When stream is completed, channel is closed.
-// // The IO blocks until the stream is exhausted.
-// func ToChannel[A any](stm Stream[A], ch chan<- A) io.IO[fun.Unit] {
-// 	stmUnits := StateFlatMapWithFinish(stm, ch,
-// 		func(a A, ch chan<- A) io.IO[fun.Pair[chan<- A, Stream[fun.Unit]]] {
-// 			return io.AndThen(io.FromPureEffect(func() {
-// 				ch <- a
-// 			}), io.Lift(fun.NewPair(ch, Empty[fun.Unit]())))
-// 		},
-// 		func(ch chan<- A) Stream[fun.Unit] {
-// 			return Eval(io.FromPureEffect(func() {
-// 				close(ch)
-// 			}))
-// 		})
-// 	return DrainAll(stmUnits)
-// }
-
-// // FromChannel constructs a stream that reads from the given channel
-// // until the channel is open.
-// // When channel is closed, the stream is also closed.
-// func FromChannel[A any](ch <-chan A) Stream[A] {
-// 	return FromStepResult(
-// 		io.Pure(func() StepResult[A] {
-// 			a, ok := <-ch
-// 			if ok {
-// 				return NewStepResult(a, FromChannel(ch))
-// 			} else {
-// 				return NewStepResultFinished[A]()
-// 			}
-// 		}),
-// 	)
-// }
-
-// // PairOfChannelsToPipe - takes two channels that are being used to
-// // talk to some external process and convert them into a single pipe.
-// // It first starts a separate go routine that will continuously run
-// // the input stream and send all it's contents to the `input` channel.
-// // The current thread is left with reading from the output channel.
-// func PairOfChannelsToPipe[A any, B any](input chan A, output chan B) Pipe[A, B] {
-// 	return func(stmA Stream[A]) Stream[B] {
-// 		return FlatMap(
-// 			Eval(io.FireAndForget(ToChannel(stmA, input))),
-// 			func(fun.Unit) Stream[B] {
-// 				return FromChannel(output)
-// 			})
+// // NewStream returns new Stream and function to close it.
+// func NewStream[A any]() (Stream[A], func()) {
+// 	ch := make(chan A)
+// 	return chanStream[A](ch), func() {
+// 		close(ch)
 // 	}
 // }
 
-// // PipeToPairOfChannels converts a streaming pipe to a pair of channels that could be used
-// // to interact with external systems.
-// func PipeToPairOfChannels[A any, B any](pipe Pipe[A, B]) io.IO[fun.Pair[chan<- A, <-chan B]] {
-// 	return io.Delay(func() io.IO[fun.Pair[chan<- A, <-chan B]] {
+// ToChannel sends all stream elements to the given channel.
+// When stream is completed, channel is closed.
+func ToChannel[A any](xs Stream[A]) chan<- A {
+	ch := make(chan A)
+	go func() {
+		ForEach(xs, func(a A) {
+			ch <- a
+		})
+		close(ch)
+	}()
+	return ch
+}
 
-// 		input := make(chan A)
-// 		output := make(chan B)
-// 		inputStream := FromChannel(input)
-// 		outputStream := pipe(inputStream)
+type fromChannelImpl[A any] <-chan A
 
-// 		return io.AndThen(
-// 			io.FireAndForget(ToChannel(outputStream, output)),
-// 			io.Lift(fun.Pair[chan<- A, <-chan B]{Left: input, Right: output}),
-// 		)
-// 	})
-// }
+func (xs fromChannelImpl[A]) Next() fun.Option[A] {
+	x, isOpen := <-xs
+	if !isOpen {
+		return fun.None[A]()
+	}
+	return fun.Some(x)
+}
+
+// FromChannel constructs a stream that reads from the given channel.
+// When channel is closed, the stream is also closed.
+func FromChannel[A any](ch <-chan A) Stream[A] {
+	return fromChannelImpl[A](ch)
+}
+
+// FromPairOfChannels - takes two channels that are being used to
+// talk to some external process and convert them into a single pipe.
+// It first starts a separate go routine that will continuously run
+// the input stream and send all it's contents to the `input` channel.
+// The current thread is left with reading from the output channel.
+func FromPairOfChannels[A, B any](xs Stream[A], in chan<- A, out <-chan B) Stream[B] {
+	go func() {
+		ForEach(xs, func(a A) { in <- a })
+		close(in)
+	}()
+	return FromChannel(out)
+}
