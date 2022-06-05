@@ -11,8 +11,8 @@ func Once[A any](a A) Stream[A] {
 	return FromSlice([]A{a})
 }
 
-// LiftMany returns a stream with all the given values.
-func LiftMany[A any](as ...A) Stream[A] {
+// FromMany returns a stream with all the given values.
+func FromMany[A any](as ...A) Stream[A] {
 	return FromSlice(as)
 }
 

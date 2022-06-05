@@ -9,12 +9,13 @@ import (
 
 func TestPool(t *testing.T) {
 	t.Parallel()
-	sleepTasks := Map(nats(), func(id int) func() int {
-		return func() int {
+	sleepTasks := MapToTasks(
+		nats(),
+		func(id int) int {
 			time.Sleep(10 * time.Millisecond)
 			return id
-		}
-	})
+		},
+	)
 	sleepTasks100 := Take(sleepTasks, 100)
 	pool := NewPool[int](10)
 	resultStream := Unique(pool(sleepTasks100))

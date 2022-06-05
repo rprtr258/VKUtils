@@ -50,3 +50,14 @@ func Compose[A, B, C any](f func(A) B, g func(B) C) func(A) C {
 		return g(f(a))
 	}
 }
+
+type Task[A any] func() A
+
+// ToTaskFactory creates function that returns task from regular function.
+func ToTaskFactory[A, B any](f func(A) B) func(A) Task[B] {
+	return func(a A) Task[B] {
+		return func() B {
+			return f(a)
+		}
+	}
+}

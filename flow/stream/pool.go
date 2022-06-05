@@ -1,14 +1,18 @@
 package stream
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/rprtr258/vk-utils/flow/fun"
+)
 
 // Pool is a pipe capable of running tasks in parallel.
-type Pool[A any] func(Stream[func() A]) Stream[A]
+type Pool[A any] func(Stream[fun.Task[A]]) Stream[A]
 
 // NewPool creates an execution pool that will execute tasks concurrently.
 // Simultaneously there could be as many as size executions.
 func NewPool[A any](size int) Pool[A] {
-	tasks := make(chan func() A)
+	tasks := make(chan fun.Task[A])
 	results := make(chan A)
 	var wg sync.WaitGroup
 	wg.Add(size)
@@ -24,7 +28,7 @@ func NewPool[A any](size int) Pool[A] {
 		wg.Wait()
 		close(results)
 	}()
-	return func(xs Stream[func() A]) Stream[A] {
+	return func(xs Stream[fun.Task[A]]) Stream[A] {
 		return FromPairOfChannels(xs, tasks, results)
 	}
 }

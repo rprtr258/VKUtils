@@ -7,7 +7,6 @@ import (
 	"log"
 
 	"github.com/rprtr258/vk-utils/flow/fun"
-	"github.com/rprtr258/vk-utils/flow/slice"
 )
 
 // Stream is a finite or infinite stream of values.
@@ -32,6 +31,11 @@ func (xs *mapImpl[A, B]) Next() fun.Option[B] {
 // Map converts values of the stream.
 func Map[A, B any](xs Stream[A], f func(A) B) Stream[B] {
 	return &mapImpl[A, B]{xs, f}
+}
+
+// MapToTasks converts values to tasks of calculating given function on the value.
+func MapToTasks[A, B any](xs Stream[A], f func(A) B) Stream[fun.Task[B]] {
+	return Map(xs, fun.ToTaskFactory(f))
 }
 
 type chainImpl[A any] struct {
@@ -68,7 +72,7 @@ func (xs *flatMapImpl[A, B]) Next() fun.Option[B] {
 }
 
 // FlatMap maps stream using function and concatenates result streams into one.
-func FlatMap[A, B any](xs Stream[A], f func(A) Stream[B]) *flatMapImpl[A, B] {
+func FlatMap[A, B any](xs Stream[A], f func(A) Stream[B]) Stream[B] {
 	return &flatMapImpl[A, B]{xs, f, NewStreamEmpty[B]()}
 }
 
@@ -78,7 +82,7 @@ func Flatten[A any](xs Stream[Stream[A]]) Stream[A] {
 }
 
 // Sum finds sum of elements in stream.
-func Sum[A slice.Number](xs Stream[A]) A {
+func Sum[A fun.Number](xs Stream[A]) A {
 	var zero A
 	return Reduce(zero,
 		func(x A, y A) A {

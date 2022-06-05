@@ -6,7 +6,7 @@ import (
 	"net/url"
 
 	f "github.com/rprtr258/vk-utils/flow/fun"
-	i "github.com/rprtr258/vk-utils/flow/io"
+	i "github.com/rprtr258/vk-utils/flow/result"
 	s "github.com/rprtr258/vk-utils/flow/stream"
 )
 
@@ -64,7 +64,7 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 		"count":    []string{xs.countString},
 	})
 	onePageOfPosts := i.FlatMap(body, jsonUnmarshall[WallPosts])
-	// onePageOfPosts = Recover(onePageOfPosts, func(err error) IO[WallPosts] {
+	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
 	// 	errMsg := err.Error()
 	// 	// TODO: change to error structs?
 	// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
@@ -161,12 +161,12 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 	pool := s.NewPool[Sharer](10)
 	tasks := s.MapFilter(
 		userIDs,
-		func(userID UserID) f.Option[func() Sharer] {
+		func(userID UserID) f.Option[f.Task[Sharer]] {
 			return f.Map(
 				findRepost(client, userID, post),
-				func(postID uint) func() Sharer {
-					return func() Sharer { return Sharer{userID, int(postID)} }
-				},
+				f.ToTaskFactory(func(postID uint) Sharer {
+					return Sharer{userID, int(postID)}
+				}),
 			)
 		},
 	)

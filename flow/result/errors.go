@@ -1,4 +1,4 @@
-package io
+package result
 
 import (
 	"fmt"
@@ -11,21 +11,18 @@ func RecoverToErrorVar(name string, err *error) {
 		log.Printf("RecoverToErrorVar(%s) (err=%v), (err2: %v)\n", name, *err, err2)
 		switch err2 := err2.(type) {
 		case error:
-			err4 := fmt.Errorf("%s: Recover from panic: %w", name, err2)
-			*err = err4
+			*err = fmt.Errorf("%s: Recover from panic: %w", name, err2)
 		case string:
-			err4 := fmt.Errorf("%s: Recover from string-panic: %s", name, err2)
-			*err = err4
+			*err = fmt.Errorf("%s: Recover from string-panic: %s", name, err2)
 		default:
-			err4 := fmt.Errorf("%s: Recover from unknown-panic: %+v", name, err2)
-			*err = err4
+			*err = fmt.Errorf("%s: Recover from unknown-panic: %+v", name, err2)
 		}
 	}
 }
 
 // RecoverToLog in case of error just logs it.
 func RecoverToLog(name string) {
-	if err2 := recover(); err2 != nil {
-		log.Printf("RecoverToLog(%s) err2: %+v\n", name, err2)
+	if err := recover(); err != nil {
+		log.Printf("RecoverToLog(%s): %+v\n", name, err)
 	}
 }

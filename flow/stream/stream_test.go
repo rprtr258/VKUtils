@@ -3,6 +3,7 @@ package stream
 import (
 	"testing"
 
+	"github.com/rprtr258/vk-utils/flow/fun"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,12 +17,16 @@ func nats10() Stream[int] {
 
 var mul2 = func(i int) int { return i * 2 }
 
+var isEven = func(i int) bool {
+	return i%2 == 0
+}
+
 func TestStream(t *testing.T) {
 	t.Parallel()
 	empty := NewStreamEmpty[int]()
 	DrainAll(empty)
 
-	res := CollectToSlice(Map(LiftMany(10, 11, 12), mul2))
+	res := CollectToSlice(Map(FromMany(10, 11, 12), mul2))
 	assert.Equal(t, []int{20, 22, 24}, res)
 }
 
@@ -55,7 +60,7 @@ func TestFlatMap(t *testing.T) {
 			return i + j
 		})
 	})
-	sum := Sum(Filter[int](pipe, func(i int) bool {
+	sum := Sum(Filter(pipe, func(i int) bool {
 		return i%2 == 0
 	}))
 	assert.Equal(t, 450, sum)
@@ -76,4 +81,56 @@ func TestForEach(t *testing.T) {
 		is = append(is, i)
 	})
 	assert.ElementsMatch(t, []int{1, 2, 4, 8, 16}, is)
+}
+
+func TestFilter(t *testing.T) {
+	t.Parallel()
+	sumEven := Sum(Filter(nats10(), isEven))
+	assert.Equal(t, 20, sumEven)
+}
+
+func TestFlatten(t *testing.T) {
+	t.Parallel()
+	floatsNested := FlatMap(nats10(), func(i int) Stream[float32] {
+		return FromMany(float32(i), float32(2*i))
+	})
+	floats := Sum(floatsNested)
+	assert.Equal(t, float32(45+45*2), floats)
+}
+
+func TestSet(t *testing.T) {
+	t.Parallel()
+	intsDuplicated := FlatMap(nats10(), func(i int) Stream[int] {
+		return Map(
+			nats10(),
+			func(j int) int { return i + j },
+		)
+	})
+	intsSet := Unique(intsDuplicated)
+	assert.Equal(t, 19, Count(intsSet))
+}
+
+func TestGroupBy(t *testing.T) {
+	t.Parallel()
+	intsDuplicated := FlatMap(nats10(), func(i int) Stream[int] {
+		return Map(nats10(), func(j int) int { return i + j })
+	})
+	intsGroups := Group(intsDuplicated, fun.Identity[int])
+	assert.Equal(t, 19, len(intsGroups))
+	for k, as := range intsGroups {
+		assert.Equal(t, k, as[0])
+	}
+}
+
+func TestGrouped(t *testing.T) {
+	t.Parallel()
+	lastWindow := CollectToSlice(Skip(Chunked(nats10(), 3), 3))
+	assert.ElementsMatch(t, lastWindow, [][]int{{9}})
+}
+
+func TestGroupByMapCount(t *testing.T) {
+	t.Parallel()
+	counted := GroupCount(nats10(), isEven)
+	assert.Equal(t, 5, counted[false])
+	assert.Equal(t, 5, counted[true])
 }

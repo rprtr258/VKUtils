@@ -10,7 +10,7 @@ import (
 	"time"
 
 	f "github.com/rprtr258/vk-utils/flow/fun"
-	i "github.com/rprtr258/vk-utils/flow/io"
+	i "github.com/rprtr258/vk-utils/flow/result"
 	s "github.com/rprtr258/vk-utils/flow/stream"
 )
 
