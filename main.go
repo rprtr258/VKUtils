@@ -14,7 +14,6 @@ import (
 )
 
 func main() {
-	// debug.SetMaxStack(10000)
 	var client vkutils.VKClient
 	rootCmd := cobra.Command{
 		Use:   "vkutils",
@@ -23,9 +22,7 @@ func main() {
 			if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
 				return errors.New("VK_ACCESS_TOKEN was not found in env vars")
 			}
-			client = vkutils.VKClient{
-				AccessToken: os.Getenv("VK_ACCESS_TOKEN"),
-			}
+			client = vkutils.NewVKClient(os.Getenv("VK_ACCESS_TOKEN"))
 			return nil
 		},
 	}

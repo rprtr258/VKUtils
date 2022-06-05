@@ -35,8 +35,15 @@ type Post struct {
 
 // VKClient is a client to VK api
 type VKClient struct {
-	AccessToken string
-	Client      http.Client
+	accessToken string
+	client      http.Client
+}
+
+func NewVKClient(accessToken string) VKClient {
+	return VKClient{
+		accessToken: accessToken,
+		client:      *http.DefaultClient,
+	}
 }
 
 // vk api constants
@@ -93,7 +100,7 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 	}
 	reqParams := req.URL.Query()
 	reqParams.Add("v", apiVersion)
-	reqParams.Add("access_token", client.AccessToken)
+	reqParams.Add("access_token", client.accessToken)
 	for k, v := range params {
 		reqParams.Add(k, v[0])
 	}
@@ -101,7 +108,7 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 	timeLimitTries := 0
 	var resp *http.Response
 	for timeLimitTries < apiRequestRetries {
-		resp, err = client.Client.Do(req)
+		resp, err = client.client.Do(req)
 		if err != nil {
 			// if user hid their wall
 			// TODO: fix, not working
