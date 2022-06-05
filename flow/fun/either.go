@@ -6,6 +6,16 @@ type Either[A, B any] struct {
 	right *B
 }
 
+// FoldConsume consumes either value and calls according callback
+func FoldConsume[A, B any](x Either[A, B], fLeft func(A), fRight func(B)) {
+	switch {
+	case x.left != nil:
+		fLeft(*x.left)
+	default:
+		fRight(*x.right)
+	}
+}
+
 // Fold pattern matches Either with two given pattern match handlers
 func Fold[A, B, C any](x Either[A, B], fLeft func(A) C, fRight func(B) C) C {
 	switch {

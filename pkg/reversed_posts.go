@@ -94,7 +94,7 @@ func GetReversedPosts(client *VKClient, groupURL string) (res ReversePostsResult
 			Owner: w.Response.Items[i].OwnerID,
 			ID:    w.Response.Items[i].ID,
 			Date:  w.Response.Items[i].Date,
-			Text:  w.Response.Items[i].Text,
+			// Text:  w.Response.Items[i].Text, // TODO: come back
 		})
 	}
 	return

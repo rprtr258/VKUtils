@@ -172,6 +172,11 @@ func Fold[A, B any](mx Result[A], fSuccess func(A) B, fFail func(error) B) B {
 	return fun.Fold(fun.Either[A, error](mx), fSuccess, fFail)
 }
 
+// FoldConsume consumes value or error and executes according callback
+func FoldConsume[A any](mx Result[A], fSuccess func(A), fFail func(error)) {
+	fun.FoldConsume(fun.Either[A, error](mx), fSuccess, fFail)
+}
+
 // // FoldToGoResult converts either value or error to go result
 // // typically it should never fail.
 // func FoldToGoResult[A any](io IO[A]) IO[GoResult[A]] {

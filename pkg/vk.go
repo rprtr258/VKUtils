@@ -26,11 +26,11 @@ type UserList struct {
 }
 
 // Post is VK wall post
+// TODO: separate api structs and lib structs(?)
 type Post struct {
 	Owner UserID `json:"owner_id"`
 	ID    uint   `json:"id"`
 	Date  uint   `json:"date"`
-	Text  string `json:"text"`
 }
 
 // VKClient is a client to VK api
@@ -238,16 +238,17 @@ func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[UserID] {
 }
 
 type postHiddenError struct {
-	*Post
+	ownerID UserID
+	postID  uint
 }
 
 func (p postHiddenError) Error() string {
-	return fmt.Sprintf("Post %d_%d is hidden", p.Owner, p.ID)
+	return fmt.Sprintf("Post %d_%d is hidden", p.ownerID, p.postID)
 }
 
-func (client *VKClient) getPostTime(post Post) i.Result[uint] {
+func (client *VKClient) getPostTime(ownerID UserID, postID uint) i.Result[uint] {
 	body := apiRequest(client, "wall.getById", url.Values{
-		"posts": []string{fmt.Sprintf("%d_%d", post.Owner, post.ID)},
+		"posts": []string{fmt.Sprintf("%d_%d", ownerID, postID)},
 	})
 	type V struct {
 		Response []struct {
@@ -262,7 +263,7 @@ func (client *VKClient) getPostTime(post Post) i.Result[uint] {
 		userList,
 		func(v V) i.Result[uint] {
 			if len(v.Response) != 1 {
-				return i.Fail[uint](postHiddenError{&post})
+				return i.Fail[uint](postHiddenError{ownerID, postID})
 			}
 			return i.Success(v.Response[0].Date)
 		},

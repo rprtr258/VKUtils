@@ -8,7 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/rprtr258/vk-utils/flow/stream"
+	i "github.com/rprtr258/vk-utils/flow/io"
+	s "github.com/rprtr258/vk-utils/flow/stream"
 	vkutils "github.com/rprtr258/vk-utils/pkg"
 )
 
@@ -36,12 +37,19 @@ func main() {
 		Long:  `Find reposters from commenters, group members, likers. Won't find all of reposters.`,
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			response := vkutils.GetRepostersByPostURL(&client, postURL)
-			stream.ForEach(
-				response,
-				func(s vkutils.Sharer) {
-					log.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
-					// fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
+			i.FoldConsume(
+				vkutils.GetRepostersByPostURL(&client, postURL),
+				func(ss s.Stream[vkutils.Sharer]) {
+					s.ForEach(
+						ss,
+						func(s vkutils.Sharer) {
+							log.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
+							// fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
+						},
+					)
+				},
+				func(err error) {
+					log.Println("Error: ", err)
 				},
 			)
 			return nil

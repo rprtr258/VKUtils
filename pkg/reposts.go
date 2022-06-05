@@ -185,26 +185,19 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 	)
 }
 
-func getSharersAndReposts(client *VKClient, ownerID UserID, postID uint) s.Stream[Sharer] {
-	// TODO: expand to two vars/change to simpler structure
-	post := Post{
-		Owner: ownerID,
-		ID:    postID,
-	}
+func getSharersAndReposts(client *VKClient, ownerID UserID, postID uint) i.Result[s.Stream[Sharer]] {
 	// TODO: separate modification of post and creation of result
-	i.Map(
-		client.getPostTime(post), // TODO: signature without struct
-		func(postDate uint) Post {
-			return Post{
+	return i.Map(
+		client.getPostTime(ownerID, postID),
+		func(postDate uint) s.Stream[Sharer] {
+			uniqueIDs := getUniqueIDs(client, ownerID, postID)
+			return getCheckedIDs(client, Post{
 				Owner: ownerID,
 				ID:    postID,
 				Date:  postDate,
-			}
+			}, uniqueIDs)
 		},
 	)
-	uniqueIDs := getUniqueIDs(client, ownerID, postID)
-	checkedIDs := getCheckedIDs(client, post, uniqueIDs)
-	return checkedIDs
 }
 
 // func getSharers(client *VKClient, ownerId UserID, postId uint) s.Stream[UserID] {
@@ -223,7 +216,7 @@ func parsePostURL(url string) (ownerID UserID, postID uint) {
 }
 
 // GetRepostersByPostURL gets reposters by post url
-func GetRepostersByPostURL(client *VKClient, postURL string) s.Stream[Sharer] {
+func GetRepostersByPostURL(client *VKClient, postURL string) i.Result[s.Stream[Sharer]] {
 	ownerID, postID := parsePostURL(postURL)
 	return getSharersAndReposts(client, ownerID, postID)
 }
