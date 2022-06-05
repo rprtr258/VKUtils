@@ -1,21 +1,30 @@
 package stream
 
 import (
+	// 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// func TestStream(t *testing.T) {
-// 	empty := Empty[int]()
-// 	_, err := io.UnsafeRunSync(DrainAll(empty))
-// 	assert.Equal(t, nil, err)
-// 	stream10_12 := LiftMany(10, 11, 12)
-// 	stream20_24 := Mul2(stream10_12)
-// 	res, err := io.UnsafeRunSync(ToSlice(stream20_24))
-// 	assert.Equal(t, nil, err)
-// 	assert.Equal(t, []int{20, 22, 24}, res)
-// }
+var nats10 = Take(Generate(0, func(s int) int { return s + 1 }), 10)
+
+// var nats10Values = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+
+var mul2 = func(xs Stream[int]) Stream[int] { return Map(xs, func(i int) int { return i * 2 }) }
+
+// var pipeMul2IO = PipeToPairOfChannels(mul2)
+
+// var printInt = NewSink(func(i int) { fmt.Printf("%d", i) })
+
+func TestStream(t *testing.T) {
+	empty := NewStreamEmpty[int]()
+	DrainAll(empty)
+	stream10_12 := LiftMany(10, 11, 12)
+	stream20_24 := mul2(stream10_12)
+	res := CollectToSlice(stream20_24)
+	assert.Equal(t, []int{20, 22, 24}, res)
+}
 
 // func TestGenerate(t *testing.T) {
 // 	powers2 := Unfold(1, func(s int) int {
@@ -52,10 +61,6 @@ func TestSum(t *testing.T) {
 	assert.Equal(t, 45, sum)
 }
 
-// func isEven(i int) bool {
-// 	return i%2 == 0
-// }
-
 // func TestFlatMapPipe(t *testing.T) {
 // 	natsRepeated := FlatMapPipe(func(i int) Stream[int] {
 // 		return MapPipe(func(j int) int {
@@ -68,7 +73,9 @@ func TestSum(t *testing.T) {
 // 	assert.NoError(t, err)
 // 	assert.Equal(t, 100, len)
 
-// 	filtered := Filter(natsRepeated, isEven)
+// 	filtered := Filter(natsRepeated, func(i int) bool {
+// 	return i%2 == 0
+// })
 // 	sumStream := Sum(filtered)
 // 	ioSum := Head(sumStream)
 // 	var sum int

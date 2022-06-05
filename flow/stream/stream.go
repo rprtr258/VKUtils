@@ -99,12 +99,10 @@ func FlatMap[A any, B any](xs Stream[A], f func(A) Stream[B]) Stream[B] {
 	return &flatMapImpl[A, B]{xs, f, NewStreamEmpty[B]()}
 }
 
-// // FlatMapPipe creates a pipe that flatmaps one stream through the provided function.
-// func FlatMapPipe[A any, B any](f func(a A) Stream[B]) Pipe[A, B] {
-// 	return func(sa Stream[A]) Stream[B] {
-// 		return FlatMap(sa, f)
-// 	}
-// }
+// FlatMapPipe creates a pipe that flatmaps one stream through the provided function.
+func FlatMapPipe[A any, B any](f func(a A) Stream[B]) func(Stream[A]) Stream[B] {
+	return fun.Swap(fun.Curry(FlatMap[A, B]))(f)
+}
 
 // Flatten simplifies a stream of streams to just the stream of values by concatenating all inner streams.
 func Flatten[A any](xs Stream[Stream[A]]) Stream[A] {

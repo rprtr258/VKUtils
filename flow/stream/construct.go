@@ -25,10 +25,10 @@ import (
 // 	return Eval(io.Lift(a))
 // }
 
-// // LiftMany returns a stream with all the given values.
-// func LiftMany[A any](as ...A) Stream[A] {
-// 	return FromSlice(as)
-// }
+// LiftMany returns a stream with all the given values.
+func LiftMany[A any](as ...A) Stream[A] {
+	return FromSlice(as)
+}
 
 type sliceImpl[A any] struct {
 	data []A

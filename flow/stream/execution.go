@@ -14,16 +14,10 @@ func ForEach[A any](xs Stream[A], f func(A)) {
 	}
 }
 
-// // DrainAll executes the stream and throws away all values.
-// func DrainAll[A any](stm Stream[A]) io.IO[fun.Unit] {
-// 	return io.FlatMap[StepResult[A]](stm, func(sra StepResult[A]) io.IO[fun.Unit] {
-// 		if sra.IsFinished {
-// 			return io.Lift(fun.Unit1)
-// 		} else {
-// 			return DrainAll(sra.Continuation)
-// 		}
-// 	})
-// }
+// DrainAll throws away all values.
+func DrainAll[A any](xs Stream[A]) {
+	ForEach(xs, func(_ A) {})
+}
 
 // CollectToSlice executes the stream and collects all results to a slice.
 func CollectToSlice[A any](xs Stream[A]) []A {
