@@ -6,6 +6,7 @@ import (
 	"net/url"
 )
 
+// ReversePostsResult is a list of posts
 type ReversePostsResult []Post
 
 // TODO: replace with get-from-first also
@@ -32,9 +33,10 @@ func getPostsCount(client *VKClient, userID UserID) (postsCount uint, err error)
 	return
 }
 
-func GetReversedPosts(client *VKClient, groupUrl string) (res ReversePostsResult, err error) {
+// GetReversedPosts gets reversed posts from group
+func GetReversedPosts(client *VKClient, groupURL string) (res ReversePostsResult, err error) {
 	var groupName string
-	fmt.Sscanf(groupUrl, "https://vk.com/%s", &groupName)
+	fmt.Sscanf(groupURL, "https://vk.com/%s", &groupName)
 
 	params := make(url.Values)
 	params.Set("group_id", groupName)
@@ -44,29 +46,29 @@ func GetReversedPosts(client *VKClient, groupUrl string) (res ReversePostsResult
 	}
 	var v struct {
 		Response []struct {
-			Id int `json:"id"`
+			ID int `json:"id"`
 		} `json:"response"`
 	}
 	err = json.Unmarshal(body, &v)
 	if err != nil {
 		return
 	}
-	groupId := UserID(-v.Response[0].Id)
-	postsCount, err := getPostsCount(client, groupId)
+	groupID := UserID(-v.Response[0].ID)
+	postsCount, err := getPostsCount(client, groupID)
 	if err != nil {
 		return
 	}
-	const MAX_POSTS_COUNT = 100
+	const maxPostsCount = 100
 	var offset uint
-	if postsCount < MAX_POSTS_COUNT {
+	if postsCount < maxPostsCount {
 		offset = 0
 	} else {
-		offset = postsCount - MAX_POSTS_COUNT
+		offset = postsCount - maxPostsCount
 	}
 	body, err = client.apiRequestRaw("wall.get", url.Values{
-		"owner_id": []string{fmt.Sprint(groupId)},
+		"owner_id": []string{fmt.Sprint(groupID)},
 		"offset":   []string{fmt.Sprint(offset)},
-		"count":    []string{fmt.Sprint(MAX_POSTS_COUNT)},
+		"count":    []string{fmt.Sprint(maxPostsCount)},
 	})
 	if err != nil {
 		return
@@ -74,8 +76,8 @@ func GetReversedPosts(client *VKClient, groupUrl string) (res ReversePostsResult
 	var w struct {
 		Response struct {
 			Items []struct {
-				Id      uint   `json:"id"`
-				OwnerId UserID `json:"owner_id"`
+				ID      uint   `json:"id"`
+				OwnerID UserID `json:"owner_id"`
 				Text    string `json:"text"`
 				Date    uint   `json:"date"`
 			} `json:"items"`
@@ -89,8 +91,8 @@ func GetReversedPosts(client *VKClient, groupUrl string) (res ReversePostsResult
 	for i := len(w.Response.Items) - 1; i >= 0; i-- {
 		res = append(res, Post{
 			// Link: fmt.Sprintf("https://vk.com/wall%d_%d", s.OwnerId, s.Id),
-			Owner: w.Response.Items[i].OwnerId,
-			ID:    w.Response.Items[i].Id,
+			Owner: w.Response.Items[i].OwnerID,
+			ID:    w.Response.Items[i].ID,
 			Date:  w.Response.Items[i].Date,
 			Text:  w.Response.Items[i].Text,
 		})

@@ -14,8 +14,10 @@ import (
 	s "github.com/rprtr258/vk-utils/flow/stream"
 )
 
+// UserID is id of some user
 type UserID int
 
+// UserList is a list of users from VK api
 type UserList struct {
 	Response struct {
 		Count uint     `json:"count"`
@@ -23,6 +25,7 @@ type UserList struct {
 	} `json:"response"`
 }
 
+// Post is VK wall post
 type Post struct {
 	Owner UserID `json:"owner_id"`
 	ID    uint   `json:"id"`
@@ -30,6 +33,7 @@ type Post struct {
 	Text  string `json:"text"`
 }
 
+// VKClient is a client to VK api
 type VKClient struct {
 	AccessToken string
 	Client      http.Client
@@ -37,30 +41,31 @@ type VKClient struct {
 
 // vk api constants
 const (
-	// getUserList_threads     = 10
-	groups_getMembers_limit = 1000
-	friends_get_limit       = 5000
-	likes_getList_limit     = 1000
+	// getUserListThreads     = 10
+	groupsGetMembersLimit = 1000
+	getFriendsLimit       = 5000
+	getLikesListLimit     = 1000
 )
 
 // application constants
 const (
-	api_version         = "5.131"
-	API_REQUEST_RETRIES = 100
-	WAIT_TIME_TO_RETRY  = time.Millisecond * 500
+	apiVersion        = "5.131"
+	apiRequestRetries = 100
+	waitTimeToRetry   = time.Millisecond * 500
 )
 
-// vk api error codes
+// VkError is vk api error
 type VkError struct {
 	Code    uint   `json:"error_code"`
 	Message string `json:"error_msg"`
 }
 
+// vk api error codes
 const (
-	TOO_MANY_REQUESTS = 6
-	ACCESS_DENIED     = 15
-	USER_BANNED       = 18
-	USER_HIDDEN       = 30
+	tooManyRequests = 6
+	accessDenied    = 15
+	userBanned      = 18
+	userHidden      = 30
 )
 
 func (err *VkError) Error() string {
@@ -86,16 +91,16 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 	if err != nil {
 		return
 	}
-	req_params := req.URL.Query()
-	req_params.Add("v", api_version)
-	req_params.Add("access_token", client.AccessToken)
+	reqParams := req.URL.Query()
+	reqParams.Add("v", apiVersion)
+	reqParams.Add("access_token", client.AccessToken)
 	for k, v := range params {
-		req_params.Add(k, v[0])
+		reqParams.Add(k, v[0])
 	}
-	req.URL.RawQuery = req_params.Encode()
+	req.URL.RawQuery = reqParams.Encode()
 	timeLimitTries := 0
 	var resp *http.Response
-	for timeLimitTries < API_REQUEST_RETRIES {
+	for timeLimitTries < apiRequestRetries {
 		resp, err = client.Client.Do(req)
 		if err != nil {
 			// if user hid their wall
@@ -117,10 +122,10 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 		}
 		if v.Err.Code != 0 {
 			// TODO: define behavior on error (retry or throw error) in loop
-			if v.Err.Code == TOO_MANY_REQUESTS {
-				time.Sleep(WAIT_TIME_TO_RETRY)
+			if v.Err.Code == tooManyRequests {
+				time.Sleep(waitTimeToRetry)
 				continue
-			} else if v.Err.Code == ACCESS_DENIED || v.Err.Code == USER_BANNED || v.Err.Code == USER_HIDDEN {
+			} else if v.Err.Code == accessDenied || v.Err.Code == userBanned || v.Err.Code == userHidden {
 				return
 			} else {
 				err = fmt.Errorf("%s(%v) = Error(%d) %s", method, params, v.Err.Code, v.Err.Message)
@@ -182,9 +187,8 @@ func (xs *userListImpl) Next() f.Option[UserID] {
 				return f.None[UserID]()
 			},
 		)
-	} else {
-		return f.None[UserID]()
 	}
+	return f.None[UserID]()
 }
 
 // TODO: merge method and count in one structure
@@ -211,29 +215,29 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[UserID] {
 	return client.getUserList("groups.getMembers", url.Values{
 		"group_id": []string{fmt.Sprint(-groupID)},
-	}, groups_getMembers_limit)
+	}, groupsGetMembersLimit)
 }
 
 func (client *VKClient) getFriends(userID UserID) s.Stream[UserID] {
 	return client.getUserList("friends.get", url.Values{
 		"user_id": []string{fmt.Sprint(userID)},
-	}, friends_get_limit)
+	}, getFriendsLimit)
 }
 
-func (client *VKClient) getLikes(ownerId UserID, postId uint) s.Stream[UserID] {
+func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[UserID] {
 	return client.getUserList("likes.getList", url.Values{
 		"type":     []string{"post"},
-		"owner_id": []string{fmt.Sprint(ownerId)},
-		"item_id":  []string{fmt.Sprint(postId)},
+		"owner_id": []string{fmt.Sprint(ownerID)},
+		"item_id":  []string{fmt.Sprint(postID)},
 		"skip_own": []string{"0"},
-	}, likes_getList_limit)
+	}, getLikesListLimit)
 }
 
-type PostHiddenErr struct {
+type postHiddenErr struct {
 	*Post
 }
 
-func (p PostHiddenErr) Error() string {
+func (p postHiddenErr) Error() string {
 	return fmt.Sprintf("Post %d_%d is hidden", p.Owner, p.ID)
 }
 
@@ -254,10 +258,9 @@ func (client *VKClient) getPostTime(post Post) i.Result[uint] {
 		userList,
 		func(v V) i.Result[uint] {
 			if len(v.Response) != 1 {
-				return i.Fail[uint](PostHiddenErr{&post})
-			} else {
-				return i.Success(v.Response[0].Date)
+				return i.Fail[uint](postHiddenErr{&post})
 			}
+			return i.Success(v.Response[0].Date)
 		},
 	)
 }

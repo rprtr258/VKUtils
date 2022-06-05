@@ -36,36 +36,44 @@ func IsRight[A, B any](x Either[A, B]) bool {
 	return Fold(x, Const[A](false), Const[B](true))
 }
 
+// Option is either value or nothing
 type Option[A any] Either[A, Unit]
 
+// None constructs option value with nothing
 func None[A any]() Option[A] {
 	return Option[A](Right[A](Unit1))
 }
 
+// Some constructs option value with value
 func Some[A any](a A) Option[A] {
 	return Option[A](Left[A, Unit](a))
 }
 
+// IsNone checks if option does not contain value
 func (x *Option[A]) IsNone() bool {
 	return IsRight(Either[A, Unit](*x))
 }
 
+// IsSome checks if option does contain value
 func (x *Option[A]) IsSome() bool {
 	return IsLeft(Either[A, Unit](*x))
 }
 
+// Unwrap gets value from option if present, SIGSEGV otherwise
 func (x Option[A]) Unwrap() A {
 	return *x.left
 }
 
-func FoldOption[A, B any](x Option[A], fLeft func(A) B, fRight func() B) B {
+// FoldOption makes value from option from either value or nothing paths
+func FoldOption[A, B any](x Option[A], fSome func(A) B, fNone func() B) B {
 	return Fold(
 		Either[A, Unit](x),
-		fLeft,
-		func(_ Unit) B { return fRight() },
+		fSome,
+		func(_ Unit) B { return fNone() },
 	)
 }
 
+// Map applies function to value if present
 func Map[A, B any](x Option[A], f func(A) B) Option[B] {
 	return FoldOption(x, Compose(f, Some[B]), None[B])
 }

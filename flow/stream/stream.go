@@ -65,6 +65,7 @@ func (xs *flatMapImpl[A, B]) Next() fun.Option[B] {
 	return y
 }
 
+// FlatMap maps stream using function and concatenates result streams into one
 func FlatMap[A any, B any](xs Stream[A], f func(A) Stream[B]) Stream[B] {
 	return &flatMapImpl[A, B]{xs, f, NewStreamEmpty[B]()}
 }
@@ -74,6 +75,7 @@ func Flatten[A any](xs Stream[Stream[A]]) Stream[A] {
 	return FlatMap(xs, fun.Identity[Stream[A]])
 }
 
+// Sum finds sum of elements in stream
 func Sum[A slice.Number](xs Stream[A]) A {
 	var zero A
 	return Reduce(zero,
@@ -208,6 +210,7 @@ func Filter[A any](xs Stream[A], p func(A) bool) Stream[A] {
 	return &filterImpl[A]{xs, p}
 }
 
+// Find searches for first element matching the predicate
 func Find[A any](xs Stream[A], p func(A) bool) fun.Option[A] {
 	return Filter(xs, p).Next()
 }
@@ -229,6 +232,7 @@ func (xs *takeWhileImpl[A]) Next() fun.Option[A] {
 	return fun.None[A]()
 }
 
+// TakeWhile takes elements while predicate is true
 func TakeWhile[A any](xs Stream[A], p func(A) bool) Stream[A] {
 	return &takeWhileImpl[A]{xs, p, false}
 }
@@ -260,6 +264,7 @@ func (xs *uniqueImpl[A]) Next() fun.Option[A] {
 	}
 }
 
+// Unique makes stream of unique elements
 func Unique[A comparable](xs Stream[A]) Stream[A] {
 	return &uniqueImpl[A]{xs, make(fun.Set[A])}
 }

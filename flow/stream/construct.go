@@ -1,5 +1,6 @@
-// functions to make Stream from something that is not stream
 package stream
+
+// functions to make Stream from something that is not stream
 
 import (
 	"github.com/rprtr258/vk-utils/flow/fun"
@@ -33,6 +34,7 @@ func FromSlice[A any](xs []A) Stream[A] {
 	return &sliceImpl[A]{xs, 0}
 }
 
+// FromSet constructs stream from set elements
 func FromSet[A comparable](xs fun.Set[A]) Stream[A] {
 	slice := make([]A, 0, len(xs))
 	for k := range xs {

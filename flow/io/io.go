@@ -8,7 +8,7 @@ import (
 	"github.com/rprtr258/vk-utils/flow/fun"
 )
 
-// Result[A] represents a calculation that will yield a value of type A once executed.
+// Result represents a calculation that will yield a value of type A once executed.
 // The calculation might as well fail.
 // It is designed to not panic ever.
 type Result[A any] fun.Either[A, error]
@@ -18,7 +18,7 @@ type Result[A any] fun.Either[A, error]
 // 	return e.Value, e.Error
 // }
 
-// LiftPair[A] constructs an IO from constant values.
+// LiftPair constructs an IO from constant values.
 func LiftPair[A any](a A, err error) Result[A] {
 	if err != nil {
 		return Result[A](fun.Right[A](err))
@@ -54,7 +54,7 @@ func LiftPair[A any](a A, err error) Result[A] {
 // 	return i.f().unsafeRun()
 // }
 
-// Eval[A] constructs an IO[A] from a simple function that might fail.
+// Eval constructs an IO[A] from a simple function that might fail.
 // If there is panic in the function, it's recovered from and represented as an error.
 func Eval[A any](f func() (A, error)) Result[A] {
 	var err error
@@ -162,11 +162,12 @@ func FlatMap[A, B any](mx Result[A], f func(A) Result[B]) Result[B] {
 // 	})
 // }
 
-// Success[A] constructs an IO[A] from a constant value.
+// Success constructs an IO[A] from a constant value.
 func Success[A any](a A) Result[A] {
 	return Result[A](fun.Left[A, error](a))
 }
 
+// Fold constructs value by either success or fail paths
 func Fold[A, B any](mx Result[A], fSuccess func(A) B, fFail func(error) B) B {
 	return fun.Fold(fun.Either[A, error](mx), fSuccess, fFail)
 }

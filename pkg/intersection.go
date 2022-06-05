@@ -1,6 +1,6 @@
 package vkutils
 
-type UserSet map[UserID]bool
+// type UserSet f.Set[UserID]
 
 // func getFollowers(client *VKClient, userId UserID) (<-chan UserID, <-chan error) {
 // 	return client.getUserList("users.getFollowers", url.Values{

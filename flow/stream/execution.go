@@ -1,5 +1,6 @@
-// functions to make something from Stream that is not Stream
 package stream
+
+// functions to make something from Stream that is not Stream
 
 import (
 	"github.com/rprtr258/vk-utils/flow/fun"
@@ -29,6 +30,7 @@ func Head[A any](xs Stream[A]) fun.Option[A] {
 	return xs.Next()
 }
 
+// Reduce reduces stream into one value using given operation
 func Reduce[A, B any](start A, op func(A, B) A, xs Stream[B]) A {
 	for x := xs.Next(); x.IsSome(); x = xs.Next() {
 		start = op(start, x.Unwrap())

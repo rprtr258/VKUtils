@@ -10,6 +10,7 @@ import (
 	s "github.com/rprtr258/vk-utils/flow/stream"
 )
 
+// WallPost is post on some user or group wall
 type WallPost struct {
 	Date        uint `json:"date"`
 	PostID      uint `json:"id"`
@@ -19,6 +20,7 @@ type WallPost struct {
 	} `json:"copy_history"`
 }
 
+// WallPosts is a list of posts from user or group wall
 // TODO: replace with f.Pair[uint, s.Stream[WallPost]]
 type WallPosts struct {
 	Response struct {
@@ -28,9 +30,9 @@ type WallPosts struct {
 }
 
 const (
-	wallGet_count              = 100
-	wallGet_countString        = "100" // TODO: fmt.Sprint(wallGet_count) (init?)
-	USER_CHECK_REPOSTS_THREADS = 10
+	wallGetCount       = 100
+	wallGetCountString = "100" // TODO: fmt.Sprint(wallGet_count) (init?)
+	// userCheckRepostsThreads = 10
 )
 
 type findRepostImplImpl struct {
@@ -53,41 +55,40 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 	}
 
 	// log.Println("REPOST CHECK", xs.offset)
-	if /*xs.offset == 0*/ xs.total.IsNone() || xs.offset < xs.total.Unwrap() {
-		body := apiRequest(xs.client, "wall.get", url.Values{
-			"owner_id": []string{xs.ownerIDString},
-			"offset":   []string{fmt.Sprint(xs.offset)},
-			"count":    []string{xs.countString},
-		})
-		onePageOfPosts := i.FlatMap(body, jsonUnmarshall[WallPosts])
-		// onePageOfPosts = Recover(onePageOfPosts, func(err error) IO[WallPosts] {
-		// 	errMsg := err.Error()
-		// 	// TODO: change to error structs?
-		// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
-		// 		errMsg == "Error(18) User was deleted or banned" ||
-		// 		errMsg == "Error(30) This profile is private" {
-		// 		return Lift[Repost](NOT_FOUND_REPOST)
-		// 	}
-		// 	return Fail[Repost](err)
-		// })
-		return i.Fold(
-			onePageOfPosts,
-			func(totalAndFirstBatch WallPosts) f.Option[WallPost] {
-				xs.total, xs.curPage = f.Some(totalAndFirstBatch.Response.Count), s.FromSlice(totalAndFirstBatch.Response.Items)
-				// if xs.offset == 0 {
-				// 	log.Printf("CHECKING USER %s WITH %d POSTS\n", xs.ownerIDString, totalAndFirstBatch.Response.Count)
-				// }
-				xs.offset += xs.count
-				return xs.curPage.Next()
-			},
-			func(err error) f.Option[WallPost] {
-				log.Println("ERROR WHILE GETTING PAGE: ", err)
-				return f.None[WallPost]()
-			},
-		)
-	} else {
+	if /*xs.offset > 0*/ xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
 		return f.None[WallPost]()
 	}
+	body := apiRequest(xs.client, "wall.get", url.Values{
+		"owner_id": []string{xs.ownerIDString},
+		"offset":   []string{fmt.Sprint(xs.offset)},
+		"count":    []string{xs.countString},
+	})
+	onePageOfPosts := i.FlatMap(body, jsonUnmarshall[WallPosts])
+	// onePageOfPosts = Recover(onePageOfPosts, func(err error) IO[WallPosts] {
+	// 	errMsg := err.Error()
+	// 	// TODO: change to error structs?
+	// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
+	// 		errMsg == "Error(18) User was deleted or banned" ||
+	// 		errMsg == "Error(30) This profile is private" {
+	// 		return Lift[Repost](NOT_FOUND_REPOST)
+	// 	}
+	// 	return Fail[Repost](err)
+	// })
+	return i.Fold(
+		onePageOfPosts,
+		func(totalAndFirstBatch WallPosts) f.Option[WallPost] {
+			xs.total, xs.curPage = f.Some(totalAndFirstBatch.Response.Count), s.FromSlice(totalAndFirstBatch.Response.Items)
+			// if xs.offset == 0 {
+			// 	log.Printf("CHECKING USER %s WITH %d POSTS\n", xs.ownerIDString, totalAndFirstBatch.Response.Count)
+			// }
+			xs.offset += xs.count
+			return xs.curPage.Next()
+		},
+		func(err error) f.Option[WallPost] {
+			log.Println("ERROR WHILE GETTING PAGE: ", err)
+			return f.None[WallPost]()
+		},
+	)
 }
 
 func findRepostImpl(client *VKClient, ownerIDString string) s.Stream[WallPost] {
@@ -96,8 +97,8 @@ func findRepostImpl(client *VKClient, ownerIDString string) s.Stream[WallPost] {
 		ownerIDString: ownerIDString,
 		offset:        0,
 		total:         f.None[uint](),
-		count:         wallGet_count,
-		countString:   fmt.Sprint(wallGet_count),
+		count:         wallGetCount,
+		countString:   wallGetCountString,
 		curPage:       s.NewStreamEmpty[WallPost](),
 	}
 }
@@ -147,6 +148,7 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 	return s.Unique(s.Chain(likers, potentialUserIDs))
 }
 
+// Sharer is post shared user
 // TODO: does it need to have json tags?
 type Sharer struct {
 	UserID   UserID `json:"user_id"`
@@ -183,24 +185,24 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 	)
 }
 
-func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) s.Stream[Sharer] {
+func getSharersAndReposts(client *VKClient, ownerID UserID, postID uint) s.Stream[Sharer] {
 	// TODO: expand to two vars/change to simpler structure
 	post := Post{
-		Owner: ownerId,
-		ID:    postId,
+		Owner: ownerID,
+		ID:    postID,
 	}
 	// TODO: separate modification of post and creation of result
 	i.Map(
 		client.getPostTime(post), // TODO: signature without struct
 		func(postDate uint) Post {
 			return Post{
-				Owner: ownerId,
-				ID:    postId,
+				Owner: ownerID,
+				ID:    postID,
 				Date:  postDate,
 			}
 		},
 	)
-	uniqueIDs := getUniqueIDs(client, ownerId, postId)
+	uniqueIDs := getUniqueIDs(client, ownerID, postID)
 	checkedIDs := getCheckedIDs(client, post, uniqueIDs)
 	return checkedIDs
 }
@@ -215,12 +217,13 @@ func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) s.Strea
 // 	)
 // }
 
-func parsePostUrl(url string) (ownerId UserID, postId uint) {
-	fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerId, &postId)
+func parsePostURL(url string) (ownerID UserID, postID uint) {
+	fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID)
 	return
 }
 
-func GetRepostersByPostUrl(client *VKClient, postUrl string) s.Stream[Sharer] {
-	ownerId, postId := parsePostUrl(postUrl)
-	return getSharersAndReposts(client, ownerId, postId)
+// GetRepostersByPostURL gets reposters by post url
+func GetRepostersByPostURL(client *VKClient, postURL string) s.Stream[Sharer] {
+	ownerID, postID := parsePostURL(postURL)
+	return getSharersAndReposts(client, ownerID, postID)
 }

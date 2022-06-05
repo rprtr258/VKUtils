@@ -29,14 +29,14 @@ func main() {
 		},
 	}
 
-	var postUrl string
+	var postURL string
 	repostsCmd := cobra.Command{
 		Use:   "reposts -u",
 		Short: "Find reposters.",
 		Long:  `Find reposters from commenters, group members, likers. Won't find all of reposters.`,
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			response := vkutils.GetRepostersByPostUrl(&client, postUrl)
+			response := vkutils.GetRepostersByPostURL(&client, postURL)
 			stream.ForEach(
 				response,
 				func(s vkutils.Sharer) {
@@ -48,7 +48,7 @@ func main() {
 		},
 		Example: "vkutils reposts -u https://vk.com/wall-2158488_651604",
 	}
-	repostsCmd.Flags().StringVarP(&postUrl, "url", "u", "", "url of vk post")
+	repostsCmd.Flags().StringVarP(&postURL, "url", "u", "", "url of vk post")
 	repostsCmd.MarkFlagRequired("url")
 	rootCmd.AddCommand(&repostsCmd)
 

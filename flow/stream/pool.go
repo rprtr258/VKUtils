@@ -3,7 +3,7 @@ package stream
 import "sync"
 
 // Pool is a pipe capable of running tasks in parallel.
-type Pool[A any] Pipe[func() A, A]
+type Pool[A any] func(Stream[func() A]) Stream[A]
 
 // NewPool creates an execution pool that will execute tasks concurrently.
 // Simultaneously there could be as many as size executions.
