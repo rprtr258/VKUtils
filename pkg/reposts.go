@@ -158,12 +158,14 @@ type Sharer struct {
 // TODO: is there a simpler way to transform Stream[IO[A]] to IO[Stream[A]] (which in turn is Stream[A])?
 func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[Sharer] {
 	// TODO: change to mapfilter
-	a := s.Map(
+	a := s.NewPool[f.Pair[UserID, f.Option[uint]]](10)(s.Map(
 		userIDs,
-		func(userID UserID) f.Pair[UserID, f.Option[uint]] {
-			return f.NewPair(userID, findRepost(client, userID, post))
+		func(userID UserID) func() f.Pair[UserID, f.Option[uint]] {
+			return func() f.Pair[UserID, f.Option[uint]] {
+				return f.NewPair(userID, findRepost(client, userID, post))
+			}
 		},
-	)
+	))
 	vv := s.Filter(
 		a,
 		func(x f.Pair[UserID, f.Option[uint]]) bool {

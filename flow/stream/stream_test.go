@@ -30,7 +30,7 @@ func TestGenerate(t *testing.T) {
 	res := Head(powers2).Unwrap()
 	assert.Equal(t, 1, res)
 
-	res = Head(Drop(powers2, 9)).Unwrap()
+	res = Head(Skip(powers2, 9)).Unwrap()
 	assert.Equal(t, 1024, res)
 }
 
@@ -58,7 +58,7 @@ func TestFlatMap(t *testing.T) {
 
 func TestChunks(t *testing.T) {
 	natsBy10 := Chunked(Take(nats(), 19), 10)
-	nats10to19 := Head(Drop(natsBy10, 1)).Unwrap()
+	nats10to19 := Head(Skip(natsBy10, 1)).Unwrap()
 	assert.ElementsMatch(t, []int{10, 11, 12, 13, 14, 15, 16, 17, 18}, nats10to19)
 }
 

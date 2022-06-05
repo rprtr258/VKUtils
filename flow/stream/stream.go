@@ -175,8 +175,8 @@ func Take[A any](xs Stream[A], n uint) Stream[A] {
 	return &takeImpl[A]{xs, n}
 }
 
-// Drop skips n elements in the stream.
-func Drop[A any](xs Stream[A], n int) Stream[A] {
+// Skip skips n elements in the stream.
+func Skip[A any](xs Stream[A], n int) Stream[A] {
 	for i := 0; i < n; i++ {
 		if x := xs.Next(); x.IsNone() {
 			break
