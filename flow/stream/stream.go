@@ -79,46 +79,10 @@ func FlatMap[A any, B any](xs Stream[A], f func(A) Stream[B]) Stream[B] {
 	return &flatMapImpl[A, B]{xs, f, NewStreamEmpty[B]()}
 }
 
-// FlatMapPipe creates a pipe that flatmaps one stream through the provided function.
-func FlatMapPipe[A any, B any](f func(a A) Stream[B]) func(Stream[A]) Stream[B] {
-	return fun.Swap(fun.Curry(FlatMap[A, B]))(f)
-}
-
 // Flatten simplifies a stream of streams to just the stream of values by concatenating all inner streams.
 func Flatten[A any](xs Stream[Stream[A]]) Stream[A] {
 	return FlatMap(xs, fun.Identity[Stream[A]])
 }
-
-// // StateFlatMap maintains state along the way.
-// func StateFlatMap[A any, B any, S any](stm Stream[A], zero S, f func(a A, s S) io.IO[fun.Pair[S, Stream[B]]]) Stream[B] {
-// 	return StateFlatMapWithFinish(stm, zero, f, func(S) Stream[B] { return Empty[B]() })
-// }
-
-// // StateFlatMapWithFinish maintains state along the way.
-// // When the source stream finishes, it invokes onFinish with the last state.
-// func StateFlatMapWithFinish[A any, B any, S any](stm Stream[A],
-// 	zero S,
-// 	f func(a A, s S) io.IO[fun.Pair[S, Stream[B]]],
-// 	onFinish func(s S) Stream[B]) Stream[B] {
-// 	res := io.FlatMap[Stream[A]](
-// 		stm,
-// 		func(sra Stream[A]) (iores io.IO[Stream[B]]) {
-// 			if sra.IsFinished {
-// 				iores = io.Lift(NewStreamEmpty(onFinish(zero)))
-// 			} else if sra.HasValue {
-// 				iop := f(sra.Value, zero)
-// 				iores = io.FlatMap(iop, func(p fun.Pair[S, Stream[B]]) io.IO[Stream[B]] {
-// 					st, stmb1 := p.Left, p.Right
-// 					stmb := Chain(stmb1, func() Stream[B] { return StateFlatMapWithFinish(sra.Continuation, st, f, onFinish) })
-// 					return stmb
-// 				})
-// 			} else {
-// 				iores = io.Lift(NewStreamEmpty(StateFlatMapWithFinish(sra.Continuation, zero, f, onFinish)))
-// 			}
-// 			return
-// 		})
-// 	return res.(Stream[B])
-// }
 
 func Sum[A slice.Number](xs Stream[A]) A {
 	var zero A
@@ -157,17 +121,29 @@ func Chunked[A any](xs Stream[A], n int) Stream[[]A] {
 	return &chunkedImpl[A]{xs, n}
 }
 
-// // Fail returns a stream that fails immediately.
-// func Fail[A any](err error) Stream[A] {
-// 	return Eval(io.Fail[A](err))
-// }
+type intersperseImpl[A any] struct {
+	Stream[A]
+	sep       A
+	isSepNext bool
+}
 
-// // AddSeparatorAfterEachElement adds a separator after each stream element
-// func AddSeparatorAfterEachElement[A any](stm Stream[A], sep A) Stream[A] {
-// 	return FlatMap(stm, func(a A) Stream[A] {
-// 		return LiftMany(a, sep)
-// 	})
-// }
+func (xs *intersperseImpl[A]) Next() fun.Option[A] {
+	if xs.isSepNext {
+		xs.isSepNext = false
+		return fun.Some(xs.sep)
+	}
+	x := xs.Stream.Next()
+	if x.IsNone() {
+		return x
+	}
+	xs.isSepNext = true
+	return x
+}
+
+// Intersperse adds a separator after each stream element
+func Intersperse[A any](xs Stream[A], sep A) Stream[A] {
+	return &intersperseImpl[A]{xs, sep, false}
+}
 
 type repeatImpl[A any] struct {
 	Stream[A]

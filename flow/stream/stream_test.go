@@ -45,13 +45,13 @@ func TestSum(t *testing.T) {
 	assert.Equal(t, 45, sum)
 }
 
-func TestFlatMapPipe(t *testing.T) {
-	pipe := FlatMapPipe(func(i int) Stream[int] {
+func TestFlatMap(t *testing.T) {
+	pipe := FlatMap(nats10(), func(i int) Stream[int] {
 		return Map(nats10(), func(j int) int {
 			return i + j
 		})
 	})
-	sum := Sum(Filter(pipe(nats10()), func(i int) bool {
+	sum := Sum(Filter(pipe, func(i int) bool {
 		return i%2 == 0
 	}))
 	assert.Equal(t, 450, sum)
