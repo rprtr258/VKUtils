@@ -46,8 +46,8 @@ type findRepostImplImpl struct {
 	curPage s.Stream[WallPost]
 }
 
-// TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic
-// TODO: limit extracted fields
+// TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic.
+// TODO: limit extracted fields.
 func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 	// TODO: move out to flatten
 	if x := xs.curPage.Next(); x.IsSome() {
@@ -211,7 +211,9 @@ func getSharersAndReposts(client *VKClient, ownerID UserID, postID uint) i.Resul
 // }
 
 func parsePostURL(url string) (ownerID UserID, postID uint) {
-	fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID)
+	if _, err := fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID); err != nil {
+		log.Println("Error: ", err)
+	}
 	return
 }
 

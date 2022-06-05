@@ -63,10 +63,14 @@ package vkutils
 
 // 	// TODO: rewrite to channels
 // 	// TODO: parallelize
-// 	toExclude := make(UserSet)
-// 	inserters := make(
-// 		[]func() (<-chan UserID, <-chan error),
-// 		len(v.Exclude.GroupMembers)+len(v.Include.Friends)+len(v.Include.Followers)+len(v.Exclude.Likers)+len(v.Exclude.Likers),
+//	toExclude := make(UserSet)
+//	inserters := make(
+//		[]func() (<-chan UserID, <-chan error),
+//		len(v.Exclude.GroupMembers)+
+//			len(v.Include.Friends)+
+//			len(v.Include.Followers)+
+//			len(v.Exclude.Likers)+
+//			len(v.Exclude.Likers),
 // 	)
 // 	for _, groupSet := range v.Exclude.GroupMembers {
 // 		inserters = append(inserters, func() (<-chan UserID, <-chan error) { return client.getGroupMembers(groupSet.GroupId) })

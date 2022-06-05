@@ -3,13 +3,14 @@ package vkutils
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 )
 
 // ReversePostsResult is a list of posts.
 type ReversePostsResult []Post
 
-// TODO: replace with get-from-first also
+// TODO: replace with get-from-first also.
 func getPostsCount(client *VKClient, userID UserID) (postsCount uint, err error) {
 	ownerIDString := fmt.Sprint(userID)
 	var v struct {
@@ -36,7 +37,9 @@ func getPostsCount(client *VKClient, userID UserID) (postsCount uint, err error)
 // GetReversedPosts gets reversed posts from group.
 func GetReversedPosts(client *VKClient, groupURL string) (res ReversePostsResult, err error) {
 	var groupName string
-	fmt.Sscanf(groupURL, "https://vk.com/%s", &groupName)
+	if _, err := fmt.Sscanf(groupURL, "https://vk.com/%s", &groupName); err != nil {
+		log.Println("Error: ", err)
+	}
 
 	params := make(url.Values)
 	params.Set("group_id", groupName)

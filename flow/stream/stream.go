@@ -75,7 +75,7 @@ func Flatten[A any](xs Stream[Stream[A]]) Stream[A] {
 	return FlatMap(xs, fun.Identity[Stream[A]])
 }
 
-// Sum finds sum of elements in stream
+// Sum finds sum of elements in stream.
 func Sum[A slice.Number](xs Stream[A]) A {
 	var zero A
 	return Reduce(zero,
@@ -132,7 +132,7 @@ func (xs *intersperseImpl[A]) Next() fun.Option[A] {
 	return x
 }
 
-// Intersperse adds a separator after each stream element
+// Intersperse adds a separator after each stream element.
 func Intersperse[A any](xs Stream[A], sep A) Stream[A] {
 	return &intersperseImpl[A]{xs, sep, false}
 }
