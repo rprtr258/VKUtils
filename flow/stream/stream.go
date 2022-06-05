@@ -65,7 +65,7 @@ func (xs *flatMapImpl[A, B]) Next() fun.Option[B] {
 	return y
 }
 
-// FlatMap maps stream using function and concatenates result streams into one
+// FlatMap maps stream using function and concatenates result streams into one.
 func FlatMap[A any, B any](xs Stream[A], f func(A) Stream[B]) Stream[B] {
 	return &flatMapImpl[A, B]{xs, f, NewStreamEmpty[B]()}
 }

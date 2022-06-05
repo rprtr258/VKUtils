@@ -6,7 +6,7 @@ type Either[A, B any] struct {
 	right *B
 }
 
-// FoldConsume consumes either value and calls according callback
+// FoldConsume consumes either value and calls according callback.
 func FoldConsume[A, B any](x Either[A, B], fLeft func(A), fRight func(B)) {
 	switch {
 	case x.left != nil:
@@ -16,7 +16,7 @@ func FoldConsume[A, B any](x Either[A, B], fLeft func(A), fRight func(B)) {
 	}
 }
 
-// Fold pattern matches Either with two given pattern match handlers
+// Fold pattern matches Either with two given pattern match handlers.
 func Fold[A, B, C any](x Either[A, B], fLeft func(A) C, fRight func(B) C) C {
 	switch {
 	case x.left != nil:
@@ -46,35 +46,35 @@ func IsRight[A, B any](x Either[A, B]) bool {
 	return Fold(x, Const[A](false), Const[B](true))
 }
 
-// Option is either value or nothing
+// Option is either value or nothing.
 type Option[A any] Either[A, Unit]
 
-// None constructs option value with nothing
+// None constructs option value with nothing.
 func None[A any]() Option[A] {
 	return Option[A](Right[A](Unit1))
 }
 
-// Some constructs option value with value
+// Some constructs option value with value.
 func Some[A any](a A) Option[A] {
 	return Option[A](Left[A, Unit](a))
 }
 
-// IsNone checks if option does not contain value
+// IsNone checks if option does not contain value.
 func (x *Option[A]) IsNone() bool {
 	return IsRight(Either[A, Unit](*x))
 }
 
-// IsSome checks if option does contain value
+// IsSome checks if option does contain value.
 func (x *Option[A]) IsSome() bool {
 	return IsLeft(Either[A, Unit](*x))
 }
 
-// Unwrap gets value from option if present, SIGSEGV otherwise
+// Unwrap gets value from option if present, SIGSEGV otherwise.
 func (x Option[A]) Unwrap() A {
 	return *x.left
 }
 
-// FoldOption makes value from option from either value or nothing paths
+// FoldOption makes value from option from either value or nothing paths.
 func FoldOption[A, B any](x Option[A], fSome func(A) B, fNone func() B) B {
 	return Fold(
 		Either[A, Unit](x),
@@ -83,7 +83,7 @@ func FoldOption[A, B any](x Option[A], fSome func(A) B, fNone func() B) B {
 	)
 }
 
-// Map applies function to value if present
+// Map applies function to value if present.
 func Map[A, B any](x Option[A], f func(A) B) Option[B] {
 	return FoldOption(x, Compose(f, Some[B]), None[B])
 }

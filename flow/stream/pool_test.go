@@ -9,6 +9,7 @@ import (
 )
 
 func TestPool(t *testing.T) {
+	t.Parallel()
 	sleepTasks := Map(nats(), func(id int) func() int {
 		return func() int {
 			time.Sleep(10 * time.Millisecond)

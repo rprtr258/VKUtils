@@ -6,10 +6,10 @@ type Unit struct{}
 // Unit1 is the value of type Unit.
 var Unit1 = Unit{}
 
-// Set is a collection of distinct elements
+// Set is a collection of distinct elements.
 type Set[A comparable] map[A]Unit
 
-// Contains checks if element is in set
+// Contains checks if element is in set.
 func (s *Set[A]) Contains(a A) bool {
 	_, ok := (*s)[a]
 	return ok

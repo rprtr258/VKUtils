@@ -162,12 +162,12 @@ func Success[A any](a A) Result[A] {
 	return Result[A](fun.Left[A, error](a))
 }
 
-// Fold constructs value by either success or fail paths
+// Fold constructs value by either success or fail paths.
 func Fold[A, B any](mx Result[A], fSuccess func(A) B, fFail func(error) B) B {
 	return fun.Fold(fun.Either[A, error](mx), fSuccess, fFail)
 }
 
-// FoldConsume consumes value or error and executes according callback
+// FoldConsume consumes value or error and executes according callback.
 func FoldConsume[A any](mx Result[A], fSuccess func(A), fFail func(error)) {
 	fun.FoldConsume(fun.Either[A, error](mx), fSuccess, fFail)
 }

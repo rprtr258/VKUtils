@@ -10,7 +10,7 @@ import (
 	s "github.com/rprtr258/vk-utils/flow/stream"
 )
 
-// WallPost is post on some user or group wall
+// WallPost is post on some user or group wall.
 type WallPost struct {
 	Date        uint `json:"date"`
 	PostID      uint `json:"id"`
@@ -20,8 +20,8 @@ type WallPost struct {
 	} `json:"copy_history"`
 }
 
-// WallPosts is a list of posts from user or group wall
-// TODO: replace with f.Pair[uint, s.Stream[WallPost]]
+// WallPosts is a list of posts from user or group wall.
+// TODO: replace with f.Pair[uint, s.Stream[WallPost]].
 type WallPosts struct {
 	Response struct {
 		Count uint       `json:"count"`
@@ -148,7 +148,7 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 	return s.Unique(s.Chain(likers, potentialUserIDs))
 }
 
-// Sharer is post shared user
+// Sharer is post shared user.
 // TODO: does it need to have json tags?
 type Sharer struct {
 	UserID   UserID `json:"user_id"`
@@ -215,7 +215,7 @@ func parsePostURL(url string) (ownerID UserID, postID uint) {
 	return
 }
 
-// GetRepostersByPostURL gets reposters by post url
+// GetRepostersByPostURL gets reposters by post url.
 func GetRepostersByPostURL(client *VKClient, postURL string) i.Result[s.Stream[Sharer]] {
 	ownerID, postID := parsePostURL(postURL)
 	return getSharersAndReposts(client, ownerID, postID)

@@ -34,7 +34,7 @@ func FromSlice[A any](xs []A) Stream[A] {
 	return &sliceImpl[A]{xs, 0}
 }
 
-// FromSet constructs stream from set elements
+// FromSet constructs stream from set elements.
 func FromSet[A comparable](xs fun.Set[A]) Stream[A] {
 	slice := make([]A, 0, len(xs))
 	for k := range xs {

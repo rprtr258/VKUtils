@@ -17,6 +17,7 @@ func nats10() Stream[int] {
 var mul2 = func(i int) int { return i * 2 }
 
 func TestStream(t *testing.T) {
+	t.Parallel()
 	empty := NewStreamEmpty[int]()
 	DrainAll(empty)
 
@@ -25,6 +26,7 @@ func TestStream(t *testing.T) {
 }
 
 func TestGenerate(t *testing.T) {
+	t.Parallel()
 	powers2 := Generate(1, mul2)
 
 	res := Head(powers2).Unwrap()
@@ -35,16 +37,19 @@ func TestGenerate(t *testing.T) {
 }
 
 func TestRepeat(t *testing.T) {
+	t.Parallel()
 	results := CollectToSlice(Take(Repeat(nats10()), 21))
 	assert.ElementsMatch(t, results, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0})
 }
 
 func TestSum(t *testing.T) {
+	t.Parallel()
 	sum := Sum(nats10())
 	assert.Equal(t, 45, sum)
 }
 
 func TestFlatMap(t *testing.T) {
+	t.Parallel()
 	pipe := FlatMap(nats10(), func(i int) Stream[int] {
 		return Map(nats10(), func(j int) int {
 			return i + j
@@ -57,12 +62,14 @@ func TestFlatMap(t *testing.T) {
 }
 
 func TestChunks(t *testing.T) {
+	t.Parallel()
 	natsBy10 := Chunked(Take(nats(), 19), 10)
 	nats10to19 := Head(Skip(natsBy10, 1)).Unwrap()
 	assert.ElementsMatch(t, []int{10, 11, 12, 13, 14, 15, 16, 17, 18}, nats10to19)
 }
 
 func TestForEach(t *testing.T) {
+	t.Parallel()
 	powers2 := Generate(1, mul2)
 	is := []int{}
 	ForEach(Take(powers2, 5), func(i int) {

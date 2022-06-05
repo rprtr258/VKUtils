@@ -6,7 +6,7 @@ import (
 	"net/url"
 )
 
-// ReversePostsResult is a list of posts
+// ReversePostsResult is a list of posts.
 type ReversePostsResult []Post
 
 // TODO: replace with get-from-first also
@@ -33,7 +33,7 @@ func getPostsCount(client *VKClient, userID UserID) (postsCount uint, err error)
 	return
 }
 
-// GetReversedPosts gets reversed posts from group
+// GetReversedPosts gets reversed posts from group.
 func GetReversedPosts(client *VKClient, groupURL string) (res ReversePostsResult, err error) {
 	var groupName string
 	fmt.Sscanf(groupURL, "https://vk.com/%s", &groupName)
