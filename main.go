@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	i "github.com/rprtr258/vk-utils/flow/io"
-	s "github.com/rprtr258/vk-utils/flow/stream"
+	"github.com/rprtr258/vk-utils/flow/io"
+	"github.com/rprtr258/vk-utils/flow/stream"
 	vkutils "github.com/rprtr258/vk-utils/pkg"
 )
 
@@ -34,10 +34,10 @@ func main() {
 		Long:  `Find reposters from commenters, group members, likers. Won't find all of reposters.`,
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			i.FoldConsume(
+			io.FoldConsume(
 				vkutils.GetRepostersByPostURL(&client, postURL),
-				func(ss s.Stream[vkutils.Sharer]) {
-					s.ForEach(
+				func(ss stream.Stream[vkutils.Sharer]) {
+					stream.ForEach(
 						ss,
 						func(s vkutils.Sharer) {
 							log.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)

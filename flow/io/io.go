@@ -1,12 +1,7 @@
 // Package io implements IO tools similar to what is available in Scala cats library (and Haskell IO).
 package io
 
-import (
-	// 	"log"
-
-	// 	"github.com/pkg/errors"
-	"github.com/rprtr258/vk-utils/flow/fun"
-)
+import "github.com/rprtr258/vk-utils/flow/fun"
 
 // Result represents a calculation that will yield a value of type A once executed.
 // The calculation might as well fail.
