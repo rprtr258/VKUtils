@@ -35,9 +35,9 @@ func TestGenerate(t *testing.T) {
 	assert.Equal(t, 1024, res)
 }
 
-func TestDrainAll(t *testing.T) {
-	results := CollectToSlice(Take(Repeat(nats10()), 10))
-	assert.ElementsMatch(t, results, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+func TestRepeat(t *testing.T) {
+	results := CollectToSlice(Take(Repeat(nats10()), 21))
+	assert.ElementsMatch(t, results, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0})
 }
 
 func TestSum(t *testing.T) {
