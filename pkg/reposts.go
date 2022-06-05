@@ -142,7 +142,7 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 	if ownerID < 0 { // owner is group
 		potentialUserIDs = client.getGroupMembers(ownerID)
 	} else { // owner is user
-		potentialUserIDs = client.getFriends(UserID(ownerID))
+		potentialUserIDs = client.getFriends(ownerID)
 	}
 
 	return s.Unique(s.Chain(likers, potentialUserIDs))

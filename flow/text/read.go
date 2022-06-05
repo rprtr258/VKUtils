@@ -33,7 +33,11 @@ package text
 // var emptyByteChunkStream = stream.Empty[[]byte]()
 
 // // SplitBySeparator splits byte-chunk stream by the given separator.
-// func SplitBySeparator(stm stream.Stream[[]byte], sep byte, shouldReturnLastIncompleteLine bool) stream.Stream[[]byte] {
+// func SplitBySeparator(
+// 	stm stream.Stream[[]byte],
+// 	sep byte,
+// 	shouldReturnLastIncompleteLine bool,
+// ) stream.Stream[[]byte] {
 // 	return stream.StateFlatMapWithFinish(stm, []byte{},
 // 		func(a []byte, state []byte) io.IO[fun.Pair[[]byte, stream.Stream[[]byte]]] {
 // 			return io.Pure(func() fun.Pair[[]byte, stream.Stream[[]byte]] {
