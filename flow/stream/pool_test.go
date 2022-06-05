@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rprtr258/vk-utils/flow/slice"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,9 +17,8 @@ func TestPool(t *testing.T) {
 	})
 	sleepTasks100 := Take(sleepTasks, 100)
 	pool := NewPool[int](10)
-	resultStream := pool(sleepTasks100)
-	results := CollectToSlice(resultStream)
+	resultStream := Unique(pool(sleepTasks100))
 	start := time.Now()
-	assert.Equal(t, 100, slice.SetSize(slice.ToSet(results)))
+	assert.Equal(t, 100, Count(resultStream))
 	assert.WithinDuration(t, start, time.Now(), 150*time.Millisecond)
 }

@@ -55,7 +55,7 @@ func TestFlatMap(t *testing.T) {
 			return i + j
 		})
 	})
-	sum := Sum(Filter(pipe, func(i int) bool {
+	sum := Sum(Filter[int](pipe, func(i int) bool {
 		return i%2 == 0
 	}))
 	assert.Equal(t, 450, sum)
