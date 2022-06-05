@@ -28,7 +28,7 @@ func (xs *mapImpl[A, B]) Next() fun.Option[B] {
 }
 
 // Map converts values of the stream.
-func Map[A any, B any](xs Stream[A], f func(A) B) Stream[B] {
+func Map[A, B any](xs Stream[A], f func(A) B) Stream[B] {
 	return &mapImpl[A, B]{xs, f}
 }
 
@@ -267,4 +267,27 @@ func (xs *uniqueImpl[A]) Next() fun.Option[A] {
 // Unique makes stream of unique elements.
 func Unique[A comparable](xs Stream[A]) Stream[A] {
 	return &uniqueImpl[A]{xs, make(fun.Set[A])}
+}
+
+type mapFilterImpl[A, B any] struct {
+	Stream[A]
+	f func(A) fun.Option[B]
+}
+
+func (xs *mapFilterImpl[A, B]) Next() fun.Option[B] {
+	for {
+		x := xs.Stream.Next()
+		if x.IsNone() {
+			return fun.None[B]()
+		}
+		y := xs.f(x.Unwrap())
+		if y.IsSome() {
+			return y
+		}
+	}
+}
+
+// Map converts values of the stream.
+func MapFilter[A, B any](xs Stream[A], f func(A) fun.Option[B]) Stream[B] {
+	return &mapFilterImpl[A, B]{xs, f}
 }

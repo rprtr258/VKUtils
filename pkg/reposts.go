@@ -157,32 +157,20 @@ type Sharer struct {
 
 // TODO: remove NOT_FOUND_REPOST const
 // TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
-// TODO: is there a simpler way to transform Stream[IO[A]] to IO[Stream[A]] (which in turn is Stream[A])?
 func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[Sharer] {
-	// TODO: change to mapfilter
-	a := s.NewPool[f.Pair[UserID, f.Option[uint]]](10)(s.Map(
+	pool := s.NewPool[Sharer](10)
+	tasks := s.MapFilter(
 		userIDs,
-		func(userID UserID) func() f.Pair[UserID, f.Option[uint]] {
-			return func() f.Pair[UserID, f.Option[uint]] {
-				return f.NewPair(userID, findRepost(client, userID, post))
-			}
-		},
-	))
-	vv := s.Filter(
-		a,
-		func(x f.Pair[UserID, f.Option[uint]]) bool {
-			return x.Right.IsSome()
+		func(userID UserID) f.Option[func() Sharer] {
+			return f.Map(
+				findRepost(client, userID, post),
+				func(postID uint) func() Sharer {
+					return func() Sharer { return Sharer{userID, int(postID)} }
+				},
+			)
 		},
 	)
-	return s.Map(
-		vv,
-		func(leftSurely f.Pair[UserID, f.Option[uint]]) Sharer {
-			return Sharer{
-				UserID:   leftSurely.Left,
-				RepostID: int(leftSurely.Right.Unwrap()),
-			}
-		},
-	)
+	return pool(tasks)
 }
 
 func getSharersAndReposts(client *VKClient, ownerID UserID, postID uint) i.Result[s.Stream[Sharer]] {
