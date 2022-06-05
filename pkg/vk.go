@@ -107,7 +107,11 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 			// TODO: fix, not working
 			return
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				log.Println(err)
+			}
+		}()
 		body, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return
@@ -233,11 +237,11 @@ func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[UserID] {
 	}, getLikesListLimit)
 }
 
-type postHiddenErr struct {
+type postHiddenError struct {
 	*Post
 }
 
-func (p postHiddenErr) Error() string {
+func (p postHiddenError) Error() string {
 	return fmt.Sprintf("Post %d_%d is hidden", p.Owner, p.ID)
 }
 
@@ -258,7 +262,7 @@ func (client *VKClient) getPostTime(post Post) i.Result[uint] {
 		userList,
 		func(v V) i.Result[uint] {
 			if len(v.Response) != 1 {
-				return i.Fail[uint](postHiddenErr{&post})
+				return i.Fail[uint](postHiddenError{&post})
 			}
 			return i.Success(v.Response[0].Date)
 		},

@@ -49,7 +49,6 @@ func main() {
 		Example: "vkutils reposts -u https://vk.com/wall-2158488_651604",
 	}
 	repostsCmd.Flags().StringVarP(&postURL, "url", "u", "", "url of vk post")
-	repostsCmd.MarkFlagRequired("url")
 	rootCmd.AddCommand(&repostsCmd)
 
 	// // TODO: dump to db/sqlite like query, filter by date range, reversed flag, in text, etc.
