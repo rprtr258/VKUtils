@@ -134,12 +134,13 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 		}
 		if v.Err.Code != 0 {
 			// TODO: define behavior on error (retry or throw error) in loop
-			if v.Err.Code == tooManyRequests {
+			switch {
+			case v.Err.Code == tooManyRequests:
 				time.Sleep(waitTimeToRetry)
 				continue
-			} else if v.Err.Code == accessDenied || v.Err.Code == userBanned || v.Err.Code == userHidden {
+			case v.Err.Code == accessDenied || v.Err.Code == userBanned || v.Err.Code == userHidden:
 				return
-			} else {
+			default:
 				err = fmt.Errorf("%s(%v) = Error(%d) %s", method, params, v.Err.Code, v.Err.Message)
 			}
 			return

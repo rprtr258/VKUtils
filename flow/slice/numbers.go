@@ -11,7 +11,7 @@ type Number interface {
 // Sum sums numbers.
 func Sum[N Number](ns []N) (sum N) {
 	for _, n := range ns {
-		sum = sum + n
+		sum += n
 	}
 	return
 }
