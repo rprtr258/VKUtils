@@ -14,14 +14,17 @@ func TestSendingDataThroughChannel(t *testing.T) {
 	assert.ElementsMatch(t, results, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
 }
 
-// func TestStreamConversion(t *testing.T) {
-// 	io2 := io.ForEach(pipeMul2IO, func(pair fun.Pair[chan<- int, <-chan int]) {
-// 		input := pair.Left
-// 		output := pair.Right
-// 		input <- 10
-// 		o := <-output
-// 		assert.Equal(t, 20, o)
-// 	})
-// 	_, err := io.UnsafeRunSync(io2)
-// 	assert.NoError(t, err)
-// }
+func TestStreamConversion(t *testing.T) {
+	p := Once(10)
+	input := make(chan int)
+	output := make(chan int)
+	go func() {
+		for x := range input {
+			output <- x
+		}
+		close(output)
+	}()
+	o := FromPairOfChannels(Map(p, mul2), input, output)
+	oo := o.Next().Unwrap()
+	assert.Equal(t, 20, oo)
+}
