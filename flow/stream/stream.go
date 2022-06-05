@@ -195,24 +195,6 @@ func Drop[A any](xs Stream[A], n int) Stream[A] {
 	return xs
 }
 
-// type extendImpl[A any] struct {
-// 	Stream[A]
-// 	x       A
-// 	isFirst bool
-// }
-
-// func (xs *extendImpl[A]) Next() fun.Option[A] {
-// 	if xs.isFirst {
-// 		xs.isFirst = false
-// 		return fun.Some(xs.x)
-// 	}
-// 	return xs.Stream.Next()
-// }
-
-// func ExtendOne[A any](a A, xs Stream[A]) Stream[A] {
-// 	return &extendImpl[A]{xs, a, true}
-// }
-
 type filterImpl[A any] struct {
 	Stream[A]
 	p func(A) bool
