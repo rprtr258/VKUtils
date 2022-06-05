@@ -52,14 +52,15 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 		return x
 	}
 
-	getOnePageOfPosts := func(offset uint) i.Result[WallPosts] {
+	// log.Println("REPOST CHECK", xs.offset)
+	if /*xs.offset == 0*/ xs.total.IsNone() || xs.offset < xs.total.Unwrap() {
 		body := apiRequest(xs.client, "wall.get", url.Values{
 			"owner_id": []string{xs.ownerIDString},
-			"offset":   []string{fmt.Sprint(offset)},
+			"offset":   []string{fmt.Sprint(xs.offset)},
 			"count":    []string{xs.countString},
 		})
-		v := i.FlatMap(body, jsonUnmarshall[WallPosts])
-		// v = Recover(v, func(err error) IO[WallPosts] {
+		onePageOfPosts := i.FlatMap(body, jsonUnmarshall[WallPosts])
+		// onePageOfPosts = Recover(onePageOfPosts, func(err error) IO[WallPosts] {
 		// 	errMsg := err.Error()
 		// 	// TODO: change to error structs?
 		// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
@@ -69,17 +70,14 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 		// 	}
 		// 	return Fail[Repost](err)
 		// })
-		return v
-	}
-
-	log.Println("REPOST CHECK", xs.offset)
-	if /*xs.offset == 0*/ xs.total.IsNone() || xs.offset < xs.total.Unwrap() {
-		xs.offset += xs.count
 		return i.Fold(
-			getOnePageOfPosts(xs.offset),
+			onePageOfPosts,
 			func(totalAndFirstBatch WallPosts) f.Option[WallPost] {
-				xs.offset += xs.count
 				xs.total, xs.curPage = f.Some(totalAndFirstBatch.Response.Count), s.FromSlice(totalAndFirstBatch.Response.Items)
+				// if xs.offset == 0 {
+				// 	log.Printf("CHECKING USER %s WITH %d POSTS\n", xs.ownerIDString, totalAndFirstBatch.Response.Count)
+				// }
+				xs.offset += xs.count
 				return xs.curPage.Next()
 			},
 			func(err error) f.Option[WallPost] {
@@ -132,9 +130,8 @@ func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
 }
 
 func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID] {
-	wasChecked := make(f.Set[UserID])
-
 	// TODO: add commenters?
+
 	// scan likers
 	likers := client.getLikes(ownerID, postID)
 
@@ -146,16 +143,8 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 	} else { // owner is user
 		potentialUserIDs = client.getFriends(UserID(ownerID))
 	}
-	s.ForEach(
-		s.Chain(potentialUserIDs, likers),
-		func(userID UserID) {
-			if _, has := wasChecked[userID]; !has {
-				wasChecked[userID] = f.Unit1
-			}
-		},
-	)
 
-	return s.FromSet(wasChecked)
+	return s.Unique(s.Chain(likers, potentialUserIDs))
 }
 
 // TODO: does it need to have json tags?
@@ -168,16 +157,15 @@ type Sharer struct {
 // TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
 // TODO: is there a simpler way to transform Stream[IO[A]] to IO[Stream[A]] (which in turn is Stream[A])?
 func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[Sharer] {
+	// TODO: change to mapfilter
 	a := s.Map(
 		userIDs,
 		func(userID UserID) f.Pair[UserID, f.Option[uint]] {
 			return f.NewPair(userID, findRepost(client, userID, post))
 		},
 	)
-	slice := s.CollectToSlice(a)
-	v := s.FromSlice(slice)
 	vv := s.Filter(
-		v,
+		a,
 		func(x f.Pair[UserID, f.Option[uint]]) bool {
 			return x.Right.IsSome()
 		},
@@ -225,28 +213,12 @@ func getSharersAndReposts(client *VKClient, ownerId UserID, postId uint) s.Strea
 // 	)
 // }
 
-type RepostersResult struct {
-	Reposts []Sharer `json:"reposts"`
-	// Errs    []string `json:"errors"`
-}
-
 func parsePostUrl(url string) (ownerId UserID, postId uint) {
 	fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerId, &postId)
 	return
 }
 
-func GetRepostersByPostUrl(client *VKClient, postUrl string) RepostersResult {
+func GetRepostersByPostUrl(client *VKClient, postUrl string) s.Stream[Sharer] {
 	ownerId, postId := parsePostUrl(postUrl)
-	sharers := getSharersAndReposts(client, ownerId, postId)
-	res := RepostersResult{
-		make([]Sharer, 0),
-		// make([]string, 0),
-	}
-	s.ForEach(
-		sharers,
-		func(share Sharer) {
-			res.Reposts = append(res.Reposts, share)
-		},
-	)
-	return res
+	return getSharersAndReposts(client, ownerId, postId)
 }

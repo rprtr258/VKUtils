@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/rprtr258/vk-utils/flow/stream"
 	vkutils "github.com/rprtr258/vk-utils/pkg"
 )
 
@@ -36,7 +37,13 @@ func main() {
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			response := vkutils.GetRepostersByPostUrl(&client, postUrl)
-			log.Println(response)
+			stream.ForEach(
+				response,
+				func(s vkutils.Sharer) {
+					log.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
+					// fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
+				},
+			)
 			return nil
 		},
 		Example: "vkutils reposts -u https://vk.com/wall-2158488_651604",

@@ -99,14 +99,15 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 		resp, err = client.Client.Do(req)
 		if err != nil {
 			// if user hid their wall
+			// TODO: fix, not working
 			return
 		}
 		defer resp.Body.Close()
 		body, err = io.ReadAll(resp.Body)
 		if err != nil {
-			panic(err)
+			return
 		}
-		log.Println("GOT: ", string(body), " ON ", method, " ", params)
+		// log.Println("GOT: ", string(body), " ON ", method, " ", params)
 		var v struct {
 			Err VkError `json:"error"`
 		}
@@ -155,12 +156,12 @@ func (xs *userListImpl) Next() f.Option[UserID] {
 		return x
 	}
 
-	// TODO: returns total and stream, make better interface (how?)
-	getOnePageOfUsers := func(offset uint) i.Result[f.Pair[uint, s.Stream[UserID]]] {
-		xs.urlParams.Set("offset", fmt.Sprint(offset))
+	// log.Println("GET USER LIST", xs.offset)
+	if /*xs.offset == 0*/ xs.total.IsNone() || xs.offset < xs.total.Unwrap() {
+		xs.urlParams.Set("offset", fmt.Sprint(xs.offset))
 		body := apiRequest(xs.client, xs.method, xs.urlParams)
 		userList := i.FlatMap(body, jsonUnmarshall[UserList])
-		return i.Map(
+		onePageOfUsers := i.Map(
 			userList,
 			func(v UserList) f.Pair[uint, s.Stream[UserID]] {
 				return f.NewPair(
@@ -169,12 +170,8 @@ func (xs *userListImpl) Next() f.Option[UserID] {
 				)
 			},
 		)
-	}
-
-	log.Println("GET USER LIST", xs.offset)
-	if /*xs.offset == 0*/ xs.total.IsNone() || xs.offset < xs.total.Unwrap() {
 		return i.Fold(
-			getOnePageOfUsers(xs.offset),
+			onePageOfUsers,
 			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) f.Option[UserID] {
 				xs.offset += xs.count
 				xs.total, xs.curPage = f.Some(totalAndFirstBatch.Left), totalAndFirstBatch.Right
