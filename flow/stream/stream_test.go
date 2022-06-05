@@ -17,10 +17,6 @@ func nats10() Stream[int] {
 
 var mul2 = func(i int) int { return i * 2 }
 
-// var pipeMul2IO = PipeToPairOfChannels(mul2)
-
-// var printInt = NewSink(func(i int) { fmt.Printf("%d", i) })
-
 func TestStream(t *testing.T) {
 	empty := NewStreamEmpty[int]()
 	DrainAll(empty)
@@ -67,13 +63,11 @@ func TestChunks(t *testing.T) {
 	assert.ElementsMatch(t, []int{10, 11, 12, 13, 14, 15, 16, 17, 18}, nats10to19)
 }
 
-// func TestForEach(t *testing.T) {
-// 	powers2 := Generate(1, mul2)
-// 	is := []int{}
-// 	forEachIO := ForEach(Take(powers2, 5), func(i int) {
-// 		is = append(is, i)
-// 	})
-// 	_, err := io.UnsafeRunSync(forEachIO)
-// 	assert.NoError(t, err)
-// 	assert.ElementsMatch(t, []int{2, 4, 8, 16, 32}, is)
-// }
+func TestForEach(t *testing.T) {
+	powers2 := Generate(1, mul2)
+	is := []int{}
+	ForEach(Take(powers2, 5), func(i int) {
+		is = append(is, i)
+	})
+	assert.ElementsMatch(t, []int{1, 2, 4, 8, 16}, is)
+}
