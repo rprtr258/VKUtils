@@ -39,6 +39,7 @@ type VKClient struct {
 	client      http.Client
 }
 
+// NewVKClient creates new VKClient
 func NewVKClient(accessToken string) VKClient {
 	return VKClient{
 		accessToken: accessToken,
