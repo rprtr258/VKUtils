@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var nats10 = Take(Generate(0, func(s int) int { return s + 1 }), 10)
-
-// var nats10Values = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+func nats10() Stream[int] {
+	return Take(Generate(0, func(s int) int { return s + 1 }), 10)
+}
 
 var mul2 = func(i int) int { return i * 2 }
 
@@ -35,23 +35,13 @@ func TestGenerate(t *testing.T) {
 	assert.Equal(t, 1024, res)
 }
 
-// func TestDrainAll(t *testing.T) {
-// 	results := []int{}
-// 	natsAppend := MapEval(
-// 		Take(Repeat(nats10), 10),
-// 		func(a int) io.IO[int] {
-// 			return io.Eval(func() (int, error) {
-// 				results = append(results, a)
-// 				return a, nil
-// 			})
-// 		})
-// 	_, err := io.UnsafeRunSync(DrainAll(natsAppend))
-// 	assert.NoError(t, err)
-// 	assert.ElementsMatch(t, results, nats10Values)
-// }
+func TestDrainAll(t *testing.T) {
+	results := CollectToSlice(Take(Repeat(nats10()), 10))
+	assert.ElementsMatch(t, results, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+}
 
 func TestSum(t *testing.T) {
-	sum := Sum(nats10)
+	sum := Sum(nats10())
 	assert.Equal(t, 45, sum)
 }
 

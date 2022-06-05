@@ -24,26 +24,6 @@ func NewStream[A any]() (Stream[A], func()) {
 	}
 }
 
-// // MapEval maps the values of the stream. The provided function returns an IO.
-// func MapEval[A any, B any](stm Stream[A], f func(a A) io.IO[B]) Stream[B] {
-// 	return io.FlatMap[Stream[A]](
-// 		stm,
-// 		func(sra Stream[A]) io.IO[Stream[B]] {
-// 			if sra.IsFinished {
-// 				return io.Lift(NewStreamFinished[B]())
-// 			} else if sra.HasValue {
-// 				iob := f(sra.Value)
-// 				return io.Map(iob, func(b B) Stream[B] {
-// 					return NewStream(b, MapEval(sra.Continuation, f))
-// 				})
-// 			} else {
-// 				return io.Lift(
-// 					NewStreamEmpty(MapEval(sra.Continuation, f)),
-// 				)
-// 			}
-// 		})
-// }
-
 type mapImpl[A, B any] struct {
 	Stream[A]
 	f func(A) B
@@ -185,10 +165,27 @@ func Sum[A slice.Number](xs Stream[A]) A {
 // 	})
 // }
 
-// // Repeat appends the same stream infinitely.
-// func Repeat[A any](stm Stream[A]) Stream[A] {
-// 	return Chain(stm, func() Stream[A] { return Repeat(stm) })
-// }
+type repeatImpl[A any] struct {
+	Stream[A]
+	i   int
+	buf []A
+}
+
+func (xs *repeatImpl[A]) Next() fun.Option[A] {
+	x := xs.Stream.Next()
+	if x.IsNone() {
+		res := xs.buf[xs.i]
+		xs.i = (xs.i + 1) % len(xs.buf)
+		return fun.Some(res)
+	}
+	xs.buf = append(xs.buf, x.Unwrap())
+	return x
+}
+
+// Repeat appends the same stream infinitely.
+func Repeat[A any](xs Stream[A]) Stream[A] {
+	return &repeatImpl[A]{xs, 0, make([]A, 0)}
+}
 
 type takeImpl[A any] struct {
 	Stream[A]
