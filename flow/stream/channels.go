@@ -4,14 +4,6 @@ import (
 	"github.com/rprtr258/vk-utils/flow/fun"
 )
 
-// // NewStream returns new Stream and function to close it.
-// func NewStream[A any]() (Stream[A], func()) {
-// 	ch := make(chan A)
-// 	return chanStream[A](ch), func() {
-// 		close(ch)
-// 	}
-// }
-
 // ToChannel sends all stream elements to the given channel.
 // When stream is completed, channel is closed.
 func ToChannel[A any](xs Stream[A]) chan<- A {

@@ -3,8 +3,6 @@ package stream
 import (
 	"testing"
 
-	// 	"github.com/rprtr258/goflow/fun"
-
 	"github.com/stretchr/testify/assert"
 )
 

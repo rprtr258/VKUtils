@@ -1,44 +1,36 @@
 package stream
 
-// import (
-// 	"fmt"
-
-// 	"github.com/rprtr258/goflow/io"
-// )
-
 // // Pool is a pipe capable of running tasks in parallel.
-// type Pool[A any] Pipe[io.IO[A], io.GoResult[A]]
+// type Pool[A any] Pipe[io.Result[A], io.Result[A]]
 
 // // NewPool creates an execution pool that will execute tasks concurrently.
 // // Simultaneously there could be as many as size executions.
-// func NewPool[A any](size int) io.IO[Pool[A]] {
-// 	return io.Pure(func() Pool[A] {
-// 		input := make(chan io.IO[A])
-// 		output := make(chan io.GoResult[A])
-// 		completedExecutorIds := make(chan int)
-// 		executor := func(id int) {
-// 			for i := range input {
-// 				fmt.Println("received task")
-// 				result := io.RunSync(i)
-// 				fmt.Println("executed task: ", result)
-// 				output <- result
-// 			}
-// 			completedExecutorIds <- id
+// func NewPool[A any](size int) Pool[A] {
+// 	input := make(chan io.Result[A])
+// 	output := make(chan io.Result[A])
+// 	completedExecutorIds := make(chan int)
+// 	executor := func(id int) {
+// 		for i := range input {
+// 			fmt.Println("received task")
+// 			result := io.RunSync(i)
+// 			fmt.Println("executed task: ", result)
+// 			output <- result
 // 		}
-// 		// start executors
+// 		completedExecutorIds <- id
+// 	}
+// 	// start executors
+// 	for i := 0; i < size; i++ {
+// 		go executor(i)
+// 	}
+// 	go func() {
 // 		for i := 0; i < size; i++ {
-// 			go executor(i)
+// 			id := <-completedExecutorIds
+// 			fmt.Println("executor completed: ", id)
 // 		}
-// 		go func() {
-// 			for i := 0; i < size; i++ {
-// 				id := <-completedExecutorIds
-// 				fmt.Println("executor completed: ", id)
-// 			}
-// 			close(output)
-// 		}()
-// 		pool := PairOfChannelsToPipe(input, output)
-// 		return Pool[A](pool)
-// 	})
+// 		close(output)
+// 	}()
+// 	pool := PairOfChannelsToPipe(input, output)
+// 	return Pool[A](pool)
 // }
 
 // // ThroughPool runs a stream of tasks through the pool.
