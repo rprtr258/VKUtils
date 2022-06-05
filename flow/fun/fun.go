@@ -5,7 +5,7 @@ package fun
 import "fmt"
 
 // Const creates a function that will ignore it's input and return the specified value.
-func Const[A any, B any](b B) func(A) B {
+func Const[A, B any](b B) func(A) B {
 	return func(A) B {
 		return b
 	}
@@ -17,7 +17,7 @@ func ConstUnit[B any](b B) func(Unit) B {
 }
 
 // Swap returns a curried function with swapped order of arguments.
-func Swap[A any, B any, C any](f func(a A) func(b B) C) func(b B) func(a A) C {
+func Swap[A, B, C any](f func(a A) func(b B) C) func(b B) func(a A) C {
 	return func(b B) func(a A) C {
 		return func(a A) C {
 			return f(a)(b)
@@ -26,7 +26,7 @@ func Swap[A any, B any, C any](f func(a A) func(b B) C) func(b B) func(a A) C {
 }
 
 // Curry takes a function that has two arguments and returns a function with two argument lists.
-func Curry[A any, B any, C any](f func(a A, b B) C) func(a A) func(b B) C {
+func Curry[A, B, C any](f func(a A, b B) C) func(a A) func(b B) C {
 	return func(a A) func(b B) C {
 		return func(b B) C {
 			return f(a, b)
@@ -45,7 +45,7 @@ func ToString[A any](a A) string {
 }
 
 // Compose executes the given functions in sequence.
-func Compose[A any, B any, C any](f func(A) B, g func(B) C) func(A) C {
+func Compose[A, B, C any](f func(A) B, g func(B) C) func(A) C {
 	return func(a A) C {
 		return g(f(a))
 	}

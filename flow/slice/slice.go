@@ -1,3 +1,4 @@
+// TODO: remove in favor of using streams
 // Package slice provides common utility functions to Go slices.
 package slice
 
@@ -68,9 +69,6 @@ func Flatten[A any](ass [][]A) (aas []A) {
 func AppendAll[A any](ass ...[]A) (aas []A) {
 	return Flatten(ass)
 }
-
-// Set is a way to represent sets in Go.
-type Set[A comparable] map[A]struct{}
 
 // ToSet converts a slice to a set.
 func ToSet[A comparable](as []A) (s Set[A]) {
