@@ -14,6 +14,7 @@ func IsEven(i int) bool {
 var nats10Values = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
 func TestFilter(t *testing.T) {
+	t.Parallel()
 	sumEven := Sum(Filter(nats10Values, IsEven))
 	assert.Equal(t, 30, sumEven)
 
@@ -22,6 +23,7 @@ func TestFilter(t *testing.T) {
 }
 
 func TestFlatten(t *testing.T) {
+	t.Parallel()
 	floatsNested := Map(nats10Values, func(i int) []float32 {
 		return []float32{float32(i), float32(2 * i)}
 	})
@@ -30,6 +32,7 @@ func TestFlatten(t *testing.T) {
 }
 
 func TestSet(t *testing.T) {
+	t.Parallel()
 	intsDuplicated := FlatMap(nats10Values, func(i int) []int {
 		return Map(nats10Values, func(j int) int { return i + j })
 	})
@@ -38,6 +41,7 @@ func TestSet(t *testing.T) {
 }
 
 func TestGroupBy(t *testing.T) {
+	t.Parallel()
 	intsDuplicated := FlatMap(nats10Values, func(i int) []int {
 		return Map(nats10Values, func(j int) int { return i + j })
 	})
@@ -49,6 +53,7 @@ func TestGroupBy(t *testing.T) {
 }
 
 func TestSliding(t *testing.T) {
+	t.Parallel()
 	intWindows := Sliding(nats10Values, 3, 2)
 	assert.ElementsMatch(t, intWindows[4], []int{9, 10})
 	intWindows = Sliding(nats10Values, 2, 5)
@@ -56,11 +61,13 @@ func TestSliding(t *testing.T) {
 }
 
 func TestGrouped(t *testing.T) {
+	t.Parallel()
 	intWindows := Grouped(nats10Values, 3)
 	assert.ElementsMatch(t, intWindows[3], []int{10})
 }
 
 func TestGroupByMapCount(t *testing.T) {
+	t.Parallel()
 	counted := GroupByMapCount(nats10Values, IsEven)
 	assert.Equal(t, 5, counted[false])
 	assert.Equal(t, 5, counted[true])
