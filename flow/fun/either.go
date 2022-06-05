@@ -54,7 +54,7 @@ func (x *Option[A]) IsSome() bool {
 	return IsLeft(Either[A, Unit](*x))
 }
 
-func (x *Option[A]) Unwrap() A {
+func (x Option[A]) Unwrap() A {
 	return *x.left
 }
 

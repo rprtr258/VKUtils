@@ -11,7 +11,7 @@ var nats10 = Take(Generate(0, func(s int) int { return s + 1 }), 10)
 
 // var nats10Values = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
-var mul2 = func(xs Stream[int]) Stream[int] { return Map(xs, func(i int) int { return i * 2 }) }
+var mul2 = func(i int) int { return i * 2 }
 
 // var pipeMul2IO = PipeToPairOfChannels(mul2)
 
@@ -20,26 +20,20 @@ var mul2 = func(xs Stream[int]) Stream[int] { return Map(xs, func(i int) int { r
 func TestStream(t *testing.T) {
 	empty := NewStreamEmpty[int]()
 	DrainAll(empty)
-	stream10_12 := LiftMany(10, 11, 12)
-	stream20_24 := mul2(stream10_12)
-	res := CollectToSlice(stream20_24)
+
+	res := CollectToSlice(Map(LiftMany(10, 11, 12), mul2))
 	assert.Equal(t, []int{20, 22, 24}, res)
 }
 
-// func TestGenerate(t *testing.T) {
-// 	powers2 := Unfold(1, func(s int) int {
-// 		return s * 2
-// 	})
+func TestGenerate(t *testing.T) {
+	powers2 := Generate(1, mul2)
 
-// 	res, err := io.UnsafeRunSync(Head(powers2))
-// 	assert.NoError(t, err)
-// 	assert.Equal(t, 2, res)
+	res := Head(powers2).Unwrap()
+	assert.Equal(t, 1, res)
 
-// 	powers2_10 := Drop(powers2, 9)
-// 	res, err = io.UnsafeRunSync(Head(powers2_10))
-// 	assert.NoError(t, err)
-// 	assert.Equal(t, 1024, res)
-// }
+	res = Head(Drop(powers2, 9)).Unwrap()
+	assert.Equal(t, 1024, res)
+}
 
 // func TestDrainAll(t *testing.T) {
 // 	results := []int{}
@@ -90,4 +84,15 @@ func TestSum(t *testing.T) {
 // 	nats10to19, err := io.UnsafeRunSync(nats10to19IO)
 // 	assert.NoError(t, err)
 // 	assert.ElementsMatch(t, []int{11, 12, 13, 14, 15, 16, 17, 18, 19}, nats10to19)
+// }
+
+// func TestForEach(t *testing.T) {
+// 	powers2 := Generate(1, mul2)
+// 	is := []int{}
+// 	forEachIO := ForEach(Take(powers2, 5), func(i int) {
+// 		is = append(is, i)
+// 	})
+// 	_, err := io.UnsafeRunSync(forEachIO)
+// 	assert.NoError(t, err)
+// 	assert.ElementsMatch(t, []int{2, 4, 8, 16, 32}, is)
 // }
