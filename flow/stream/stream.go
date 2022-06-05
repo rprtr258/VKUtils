@@ -210,7 +210,7 @@ func Filter[A any](xs Stream[A], p func(A) bool) Stream[A] {
 	return &filterImpl[A]{xs, p}
 }
 
-// Find searches for first element matching the predicate
+// Find searches for first element matching the predicate.
 func Find[A any](xs Stream[A], p func(A) bool) fun.Option[A] {
 	return Filter(xs, p).Next()
 }
@@ -232,7 +232,7 @@ func (xs *takeWhileImpl[A]) Next() fun.Option[A] {
 	return fun.None[A]()
 }
 
-// TakeWhile takes elements while predicate is true
+// TakeWhile takes elements while predicate is true.
 func TakeWhile[A any](xs Stream[A], p func(A) bool) Stream[A] {
 	return &takeWhileImpl[A]{xs, p, false}
 }
@@ -264,7 +264,7 @@ func (xs *uniqueImpl[A]) Next() fun.Option[A] {
 	}
 }
 
-// Unique makes stream of unique elements
+// Unique makes stream of unique elements.
 func Unique[A comparable](xs Stream[A]) Stream[A] {
 	return &uniqueImpl[A]{xs, make(fun.Set[A])}
 }

@@ -14,10 +14,10 @@ import (
 	s "github.com/rprtr258/vk-utils/flow/stream"
 )
 
-// UserID is id of some user
+// UserID is id of some user.
 type UserID int
 
-// UserList is a list of users from VK api
+// UserList is a list of users from VK api.
 type UserList struct {
 	Response struct {
 		Count uint     `json:"count"`
@@ -25,7 +25,7 @@ type UserList struct {
 	} `json:"response"`
 }
 
-// Post is VK wall post
+// Post is VK wall post.
 // TODO: separate api structs and lib structs(?)
 type Post struct {
 	Owner UserID `json:"owner_id"`
@@ -33,13 +33,13 @@ type Post struct {
 	Date  uint   `json:"date"`
 }
 
-// VKClient is a client to VK api
+// VKClient is a client to VK api.
 type VKClient struct {
 	accessToken string
 	client      http.Client
 }
 
-// NewVKClient creates new VKClient
+// NewVKClient creates new VKClient.
 func NewVKClient(accessToken string) VKClient {
 	return VKClient{
 		accessToken: accessToken,
@@ -62,7 +62,7 @@ const (
 	waitTimeToRetry   = time.Millisecond * 500
 )
 
-// VkError is vk api error
+// VkError is vk api error.
 type VkError struct {
 	Code    uint   `json:"error_code"`
 	Message string `json:"error_msg"`
