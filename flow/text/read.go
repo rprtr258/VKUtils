@@ -1,112 +1,113 @@
 // Package text provides some utilities to work with text files.
 package text
 
-// import (
-// 	"errors"
-// 	fio "io"
+import (
+	"io"
+	"log"
+	"os"
 
-// 	"github.com/rprtr258/goflow/fun"
-// 	"github.com/rprtr258/goflow/io"
-// 	"github.com/rprtr258/goflow/stream"
-// )
+	"github.com/rprtr258/vk-utils/flow/fun"
+	"github.com/rprtr258/vk-utils/flow/result"
+	s "github.com/rprtr258/vk-utils/flow/stream"
+)
 
-// // ReadByteChunks reads chunks from the reader.
-// func ReadByteChunks(reader fio.Reader, chunkSize int) stream.Stream[[]byte] {
-// 	return io.Eval(func() (res stream.StepResult[[]byte], err error) {
-// 		bytes := make([]byte, chunkSize)
-// 		var cnt int
-// 		cnt, err = reader.Read(bytes)
-// 		if err == fio.EOF {
-// 			err = nil
-// 			res = stream.NewStepResultEmpty(stream.Empty[[]byte]())
-// 		} else if err == nil {
-// 			if cnt == 0 {
-// 				res = stream.NewStepResultEmpty(stream.Empty[[]byte]())
-// 			} else {
-// 				res = stream.NewStepResult(bytes[0:cnt], ReadByteChunks(reader, chunkSize))
-// 			}
-// 		}
-// 		return
-// 	})
-// }
+// ReadOnlyFile returns a resource for the specified filename.
+func OpenFile(name string) result.Result[*os.File] {
+	return result.Eval(func() (*os.File, error) {
+		return os.Open(name)
+	})
+}
 
-// var emptyByteChunkStream = stream.Empty[[]byte]()
+type readByteChunksImpl struct {
+	reader    io.Reader
+	eof       bool
+	chunkSize int
+}
 
-// // SplitBySeparator splits byte-chunk stream by the given separator.
-// func SplitBySeparator(
-// 	stm stream.Stream[[]byte],
-// 	sep byte,
-// 	shouldReturnLastIncompleteLine bool,
-// ) stream.Stream[[]byte] {
-// 	return stream.StateFlatMapWithFinish(stm, []byte{},
-// 		func(a []byte, state []byte) io.IO[fun.Pair[[]byte, stream.Stream[[]byte]]] {
-// 			return io.Pure(func() fun.Pair[[]byte, stream.Stream[[]byte]] {
-// 				var resultState []byte
-// 				var stm stream.Stream[[]byte]
-// 				parts := splitBy(sep, a, [][]byte{})
-// 				if len(parts) == 0 {
-// 					stm = stream.Fail[[]byte](errors.New("unexpected len==0 from splitBy"))
-// 				} else if len(parts) == 1 {
-// 					// separator not found
-// 					resultState = append(state, a...)
-// 					stm = emptyByteChunkStream
-// 				} else {
-// 					parts[0] = append(state, parts[0]...)
-// 					resultState = parts[len(parts)-1]
-// 					stm = stream.LiftMany(parts[0 : len(parts)-1]...)
-// 				}
-// 				return fun.NewPair(resultState, stm)
-// 			})
+func (xs *readByteChunksImpl) Next() fun.Option[[]byte] {
+	if xs.eof {
+		return fun.None[[]byte]()
+	}
+	chunk := make([]byte, xs.chunkSize)
+	cnt, err := xs.reader.Read(chunk)
+	switch {
+	case err == io.EOF || err == nil && cnt == 0:
+		xs.eof = true
+		return fun.None[[]byte]()
+	case err == nil:
+		return fun.Some(chunk[0:cnt])
+	default:
+		log.Println("Error reading chunk: ", err)
+		return fun.None[[]byte]()
+	}
+}
 
-// 		},
-// 		func(s []byte) stream.Stream[[]byte] {
-// 			if len(s) > 0 && shouldReturnLastIncompleteLine {
-// 				return stream.Lift(s)
-// 			} else {
-// 				return emptyByteChunkStream
-// 			}
-// 		})
-// }
+// ReadByteChunks reads chunks from the reader.
+func ReadByteChunks(reader io.Reader, chunkSize int) s.Stream[[]byte] {
+	return &readByteChunksImpl{reader, false, chunkSize}
+}
 
-// func indexOf[A comparable](element A, data []A) int {
-// 	for k, v := range data {
-// 		if element == v {
-// 			return k
-// 		}
-// 	}
-// 	return -1
-// }
+type splitByImpl struct {
+	s.Stream[[]byte]
+	curBuf    []byte
+	separator byte
+}
 
-// // splitBy returns at least one part when separator is not found.
-// // Even if len(data) == 0.
-// func splitBy[A comparable](sep A, data []A, prefixParts [][]A) (parts [][]A) {
-// 	i := indexOf(sep, data)
-// 	if i == -1 {
-// 		return append(prefixParts, data)
-// 	} else {
-// 		return splitBy(sep, data[i+1:], append(prefixParts, data[:i]))
-// 	}
-// }
+func (xs *splitByImpl) Next() fun.Option[[]byte] {
+	x := xs.Stream.Next()
+	switch {
+	case len(xs.curBuf) == 0 && x.IsNone():
+		return fun.None[[]byte]()
+	case x.IsSome():
+		xs.curBuf = append(xs.curBuf, x.Unwrap()...)
+		i := 0
+		for i < len(xs.curBuf) && xs.curBuf[i] != xs.separator {
+			i++
+			if i == len(xs.curBuf) {
+				x := xs.Stream.Next()
+				if x.IsNone() {
+					return xs.end()
+				}
+				xs.curBuf = append(xs.curBuf, x.Unwrap()...)
+			}
+		}
+		return xs.dump(i)
+	default:
+		i := 0
+		for i < len(xs.curBuf) && xs.curBuf[i] != xs.separator {
+			i++
+			if i == len(xs.curBuf) {
+				return xs.end()
+			}
+		}
+		return xs.dump(i)
+	}
+}
 
-// // MapToStrings converts stream of bytes to strings.
-// func MapToStrings(stm stream.Stream[[]byte]) stream.Stream[string] {
-// 	return stream.Map(stm, func(a []byte) string { return string(a) })
-// }
+// dump one piece and advance
+func (xs *splitByImpl) dump(i int) fun.Option[[]byte] {
+	res := xs.curBuf[:i]
+	xs.curBuf = xs.curBuf[i+1:]
+	return fun.Some(res)
+}
 
-// const DefaultChunkSize = 4096
+// end stream and return everything that is left
+func (xs *splitByImpl) end() fun.Option[[]byte] {
+	res := xs.curBuf
+	xs.curBuf = nil
+	return fun.Some(res)
+}
 
-// // ReadLines reads text file line-by-line.
-// // If there is a last line that is not terminated by '\n', it is ignored.
-// func ReadLines(reader fio.Reader) stream.Stream[string] {
-// 	chunks := ReadByteChunks(reader, DefaultChunkSize)
-// 	rows := SplitBySeparator(chunks, '\n', false)
-// 	return MapToStrings(rows)
-// }
+// SplitBySeparator splits byte-chunk stream by the given separator.
+func SplitBySeparator(xs s.Stream[[]byte], sep byte) s.Stream[[]byte] {
+	return &splitByImpl{xs, nil, sep}
+}
 
-// // ReadLinesWithLastNonFinishedLine reads text file line-by-line.
-// // Also returns the last line that is not terminated by '\n'
-// func ReadLinesWithNonFinishedLine(reader fio.Reader) stream.Stream[string] {
-// 	chunks := ReadByteChunks(reader, DefaultChunkSize)
-// 	rows := SplitBySeparator(chunks, '\n', true)
-// 	return MapToStrings(rows)
-// }
+const DefaultChunkSize = 4 * 1024 // 4 KB
+
+// ReadLines reads text file line-by-line.
+func ReadLines(reader io.Reader) s.Stream[string] {
+	chunks := ReadByteChunks(reader, DefaultChunkSize)
+	rows := SplitBySeparator(chunks, '\n')
+	return s.Map(rows, func(x []byte) string { return string(x) })
+}
