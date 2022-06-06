@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/rprtr258/vk-utils/flow/fun"
 	i "github.com/rprtr258/vk-utils/flow/result"
 	"github.com/rprtr258/vk-utils/flow/stream"
 	"github.com/stretchr/testify/assert"
@@ -45,21 +46,6 @@ func TestTextStream2(t *testing.T) {
 	assert.Equal(t, []int{20, 22, 24}, res)
 }
 
-// func TestTextStreamWrite(t *testing.T) {
-// 	data := []byte(exampleText)
-// 	r := bytes.NewReader(data)
-// 	strings := ReadLines(r)
-// 	lens := stream.Map(strings, func(s string) int { return len(s) })
-// 	lensAsString := stream.Map(lens, fun.ToString[int])
-// 	w := bytes.NewBuffer([]byte{})
-// 	writes := stream.ToSink(lensAsString, WriteLines(w))
-// 	stream.DrainAll(writes)
-// 	assert.Equal(t, `0
-// 6
-// 7
-// `, w.String())
-// }
-
 func TestFile(t *testing.T) {
 	path := t.TempDir() + "/hello.txt"
 	content := "hello"
@@ -77,4 +63,18 @@ func TestFile(t *testing.T) {
 	})
 	str := contentIO.Unwrap()
 	assert.Equal(t, content, str)
+}
+
+func TestTextStreamWrite(t *testing.T) {
+	data := []byte(exampleText)
+	r := bytes.NewReader(data)
+	strings := ReadLines(r)
+	lens := stream.Map(strings, func(s string) int { return len(s) })
+	lensAsString := stream.Map(lens, fun.ToString[int])
+	w := bytes.NewBuffer([]byte{})
+	WriteLines(w, lensAsString)
+	assert.Equal(t, `0
+6
+7
+`, w.String())
 }
