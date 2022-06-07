@@ -21,11 +21,7 @@ type mapImpl[A, B any] struct {
 }
 
 func (xs *mapImpl[A, B]) Next() fun.Option[B] {
-	return fun.FoldOption(
-		xs.Stream.Next(),
-		func(a A) fun.Option[B] { return fun.Some(xs.f(a)) },
-		fun.None[B],
-	)
+	return fun.Map(xs.Stream.Next(), xs.f)
 }
 
 // Map converts values of the stream.
