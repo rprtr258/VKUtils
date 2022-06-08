@@ -5,9 +5,9 @@ import (
 	"log"
 	"net/url"
 
-	f "github.com/rprtr258/vk-utils/flow/fun"
-	i "github.com/rprtr258/vk-utils/flow/result"
-	s "github.com/rprtr258/vk-utils/flow/stream"
+	f "github.com/rprtr258/goflow/fun"
+	i "github.com/rprtr258/goflow/result"
+	s "github.com/rprtr258/goflow/stream"
 )
 
 // WallPost is post on some user or group wall.

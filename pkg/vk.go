@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"time"
 
-	f "github.com/rprtr258/vk-utils/flow/fun"
-	i "github.com/rprtr258/vk-utils/flow/result"
-	s "github.com/rprtr258/vk-utils/flow/stream"
+	f "github.com/rprtr258/goflow/fun"
+	i "github.com/rprtr258/goflow/result"
+	s "github.com/rprtr258/goflow/stream"
 )
 
 // UserID is id of some user.

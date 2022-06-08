@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	i "github.com/rprtr258/vk-utils/flow/result"
-	s "github.com/rprtr258/vk-utils/flow/stream"
+	i "github.com/rprtr258/goflow/result"
+	s "github.com/rprtr258/goflow/stream"
 	vkutils "github.com/rprtr258/vk-utils/pkg"
 )
 
