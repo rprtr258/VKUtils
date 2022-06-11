@@ -130,7 +130,7 @@ func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
 	return f.Map(repostMaybe, func(w WallPost) uint { return w.PostID })
 }
 
-func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID] {
+func getPotentialUserIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID] {
 	// TODO: add commenters?
 
 	// scan likers
@@ -145,14 +145,13 @@ func getUniqueIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID
 		potentialUserIDs = client.getFriends(ownerID)
 	}
 
-	return s.Unique(s.Chain(likers, potentialUserIDs))
+	return s.Chain(likers, potentialUserIDs)
 }
 
 // Sharer is post shared user.
-// TODO: does it need to have json tags?
 type Sharer struct {
-	UserID   UserID `json:"user_id"`
-	RepostID int    `json:"repost_id"` // TODO: uint?
+	UserID   UserID
+	RepostID int // TODO: uint?
 }
 
 // TODO: remove NOT_FOUND_REPOST const
@@ -169,22 +168,7 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 			)
 		},
 	)
-	return s.Parallel[Sharer](10, tasks)
-}
-
-func getSharersAndReposts(client *VKClient, ownerID UserID, postID uint) i.Result[s.Stream[Sharer]] {
-	// TODO: separate modification of post and creation of result
-	return i.Map(
-		client.getPostTime(ownerID, postID),
-		func(postDate uint) s.Stream[Sharer] {
-			uniqueIDs := getUniqueIDs(client, ownerID, postID)
-			return getCheckedIDs(client, Post{
-				Owner: ownerID,
-				ID:    postID,
-				Date:  postDate,
-			}, uniqueIDs)
-		},
-	)
+	return s.Parallel(10, tasks)
 }
 
 // func getSharers(client *VKClient, ownerId UserID, postId uint) s.Stream[UserID] {
@@ -207,5 +191,16 @@ func parsePostURL(url string) (ownerID UserID, postID uint) {
 // GetRepostersByPostURL gets reposters by post url.
 func GetRepostersByPostURL(client *VKClient, postURL string) i.Result[s.Stream[Sharer]] {
 	ownerID, postID := parsePostURL(postURL)
-	return getSharersAndReposts(client, ownerID, postID)
+	// TODO: separate modification of post and creation of result
+	return i.Map(
+		client.getPostTime(ownerID, postID),
+		func(postDate uint) s.Stream[Sharer] {
+			uniqueIDs := s.Unique(getPotentialUserIDs(client, ownerID, postID))
+			return getCheckedIDs(client, Post{
+				Owner: ownerID,
+				ID:    postID,
+				Date:  postDate,
+			}, uniqueIDs)
+		},
+	)
 }

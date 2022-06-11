@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -38,10 +39,9 @@ func main() {
 				vkutils.GetRepostersByPostURL(&client, postURL),
 				func(ss s.Stream[vkutils.Sharer]) {
 					s.ForEach(
-						ss,
+						s.Take(ss, 1),
 						func(s vkutils.Sharer) {
-							log.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
-							// fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
+							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
 						},
 					)
 				},
