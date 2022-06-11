@@ -158,7 +158,6 @@ type Sharer struct {
 // TODO: remove NOT_FOUND_REPOST const
 // TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
 func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[Sharer] {
-	pool := s.NewPool[Sharer](10)
 	tasks := s.MapFilter(
 		userIDs,
 		func(userID UserID) f.Option[f.Task[Sharer]] {
@@ -170,7 +169,7 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 			)
 		},
 	)
-	return pool(tasks)
+	return s.Parallel[Sharer](10, tasks)
 }
 
 func getSharersAndReposts(client *VKClient, ownerID UserID, postID uint) i.Result[s.Stream[Sharer]] {
