@@ -218,7 +218,6 @@ func (client *VKClient) getUserList(method string, params url.Values, pageSize u
 	}
 }
 
-// TODO: group id is groupid, user id is userid
 func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[UserInfo] {
 	return client.getUserList("groups.getMembers", MakeUrlValues(
 		"group_id", fmt.Sprint(-groupID),
