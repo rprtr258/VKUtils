@@ -112,10 +112,7 @@ func main() {
 	repostsCmd.Flags().StringVarP(&postURL, "url", "u", "", "url of vk post")
 	rootCmd.AddCommand(&repostsCmd)
 
-	// // TODO: dump to db/sqlite like query, filter by date range, reversed flag, in text, etc.
-	// // TODO: search in different groups, profiles
-	// // https://vk.com/app3876642
-	// // https://vk.com/wall-2158488_651604
+	// TODO: dump groups/profiles posts into database (own format?)
 	var groupURL string
 	revPostsUrl := cobra.Command{ // TODO: rename to dump posts
 		Use:   "revposts",
