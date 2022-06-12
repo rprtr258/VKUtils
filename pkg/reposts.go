@@ -155,7 +155,7 @@ func getPotentialUserIDs(client *VKClient, ownerID UserID, postID uint) s.Stream
 // Sharer is post shared user.
 type Sharer struct {
 	UserID   UserID
-	RepostID int // TODO: uint?
+	RepostID uint // TODO: uint?
 }
 
 // TODO: remove NOT_FOUND_REPOST const
@@ -167,7 +167,7 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 			return f.Map(
 				findRepost(client, userID, post),
 				f.ToTaskFactory(func(postID uint) Sharer {
-					return Sharer{userID, int(postID)}
+					return Sharer{userID, postID}
 				}),
 			)
 		},
