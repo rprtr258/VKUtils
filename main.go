@@ -151,7 +151,6 @@ func main() {
 		friends    []string
 		followers  []string
 	)
-	// TODO: union
 	intersectionCmd := cobra.Command{
 		Use:   "intersection",
 		Short: "Find users sets intersection.",

@@ -134,8 +134,6 @@ type Sharer struct {
 	RepostID uint // TODO: uint?
 }
 
-// TODO: remove NOT_FOUND_REPOST const
-// TODO: consider if len(res.Reposters) == res.TotalReposts { break } // which is highly unlikely
 func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[Sharer] {
 	tasks := s.MapFilter(
 		userIDs,
