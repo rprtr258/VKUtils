@@ -46,6 +46,22 @@ func parsePostsList(ls []string) r.Result[[]vk.PostID] {
 	return r.Success(res)
 }
 
+// TODO: return result
+func parsePostURL(url string) (ownerID vk.UserID, postID uint) {
+	if _, err := fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID); err != nil {
+		log.Println("Error: ", err)
+	}
+	return
+}
+
+func parseGroupURL(groupURL string) r.Result[string] {
+	var groupName string
+	if _, err := fmt.Sscanf(groupURL, "https://vk.com/%s", &groupName); err != nil {
+		return r.Err[string](err)
+	}
+	return r.Success(groupName)
+}
+
 func main() {
 	var client vk.VKClient
 	rootCmd := cobra.Command{
@@ -67,8 +83,9 @@ func main() {
 		Long:  `Find reposters from commenters, group members, likers. Won't find all of reposters.`,
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ownerID, postID := parsePostURL(postURL)
 			r.FoldConsume(
-				vk.GetRepostersByPostURL(&client, postURL),
+				vk.GetReposters(&client, ownerID, postID),
 				func(ss s.Stream[vk.Sharer]) {
 					s.ForEach(
 						s.Take(ss, 1),
@@ -92,14 +109,15 @@ func main() {
 	// // TODO: search in different groups, profiles
 	// // https://vk.com/app3876642
 	// // https://vk.com/wall-2158488_651604
-	var groupUrl string
+	var groupURL string
 	revPostsUrl := cobra.Command{ // TODO: rename to dump posts
 		Use:   "revposts",
 		Short: "List group posts in reversed order (from old to new).",
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			groupName := parseGroupURL(groupURL)
 			r.FoldConsume(
-				vk.GetReversedPosts(&client, groupUrl),
+				vk.GetReversedPosts(&client, groupName.Unwrap()),
 				func(x s.Stream[vk.Post]) {
 					s.ForEach(
 						x,
@@ -112,14 +130,14 @@ func main() {
 					)
 				},
 				func(err error) {
-					fmt.Printf("error: %v", err)
+					fmt.Printf("error: %v\n", err)
 				},
 			)
 			return nil
 		},
 		Example: "vkutils revposts https://vk.com/abobus_official",
 	}
-	revPostsUrl.Flags().StringVarP(&groupUrl, "url", "u", "", "url of vk group")
+	revPostsUrl.Flags().StringVarP(&groupURL, "url", "u", "", "url of vk group")
 	revPostsUrl.MarkFlagRequired("url")
 	rootCmd.AddCommand(&revPostsUrl)
 

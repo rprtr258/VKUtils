@@ -175,14 +175,7 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 	return s.Parallel(10, tasks)
 }
 
-func parsePostURL(url string) (ownerID UserID, postID uint) {
-	if _, err := fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID); err != nil {
-		log.Println("Error: ", err)
-	}
-	return
-}
-
-func getSharers(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[Sharer]] {
+func GetReposters(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[Sharer]] {
 	// TODO: separate modification of post and creation of result
 	return r.Map(
 		client.getPostTime(ownerID, postID),
@@ -195,10 +188,4 @@ func getSharers(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream
 			}, uniqueIDs)
 		},
 	)
-}
-
-// GetRepostersByPostURL gets reposters by post url.
-func GetRepostersByPostURL(client *VKClient, postURL string) r.Result[s.Stream[Sharer]] {
-	ownerID, postID := parsePostURL(postURL)
-	return getSharers(client, ownerID, postID)
 }
