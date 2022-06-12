@@ -151,9 +151,9 @@ func main() {
 		friends    []string
 		followers  []string
 	)
-	intersectionCmd := cobra.Command{
-		Use:   "intersection",
-		Short: "Find users sets intersection.",
+	countCmd := cobra.Command{
+		Use:   "count",
+		Short: "Counts how many sets users belong to. Useful for uniting and intersecting user sets.",
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var errors []string
@@ -182,23 +182,23 @@ func main() {
 				return fmt.Errorf(strings.Join(errors, "\n"))
 			}
 
-			for userInfo := range vk.GetIntersection(&client, vk.UserSets{
+			for _, userInfoCount := range vk.MembershipCount(&client, vk.UserSets{
 				GroupMembers: groupIDs.Unwrap(),
 				Friends:      friendIDs.Unwrap(),
 				Followers:    followerIDs.Unwrap(),
 				Likers:       postLikerIDs.Unwrap(),
 			}) {
-				fmt.Printf("%d: %s %s\n", userInfo.ID, userInfo.FirstName, userInfo.SecondName)
+				fmt.Printf("%d: %s %s - %d\n", userInfoCount.Left.ID, userInfoCount.Left.FirstName, userInfoCount.Left.SecondName, userInfoCount.Right)
 			}
 			return nil
 		},
-		Example: "vkutils intersection --friends 168715495 --groups -187839235 --post-likers 107904132_1371",
+		Example: "vkutils count --friends 168715495 --groups -187839235 --post-likers 107904132_1371",
 	}
-	intersectionCmd.Flags().StringSliceVarP(&groups, "groups", "g", []string{}, "group ids members of which to ")
-	intersectionCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
-	intersectionCmd.Flags().StringSliceVarP(&friends, "friends", "r", []string{}, "group ids members of which to ")
-	intersectionCmd.Flags().StringSliceVarP(&followers, "followers", "w", []string{}, "group ids members of which to ")
-	rootCmd.AddCommand(&intersectionCmd)
+	countCmd.Flags().StringSliceVarP(&groups, "groups", "g", []string{}, "group ids members of which to ")
+	countCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
+	countCmd.Flags().StringSliceVarP(&friends, "friends", "r", []string{}, "group ids members of which to ")
+	countCmd.Flags().StringSliceVarP(&followers, "followers", "w", []string{}, "group ids members of which to ")
+	rootCmd.AddCommand(&countCmd)
 
 	start := time.Now()
 	if err := rootCmd.Execute(); err != nil {
