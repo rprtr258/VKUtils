@@ -3,6 +3,8 @@ version: '3'
 dotenv: [".env"]
 
 tasks:
+  todo:
+    - rg "TODO:"
   reposts:
     - go run main.go reposts -u https://vk.com/wall-149859311_975
   revposts:

@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	f "github.com/rprtr258/goflow/fun"
 	r "github.com/rprtr258/goflow/result"
 	s "github.com/rprtr258/goflow/stream"
 	vk "github.com/rprtr258/vk-utils/pkg"
@@ -46,12 +47,15 @@ func parsePostsList(ls []string) r.Result[[]vk.PostID] {
 	return r.Success(res)
 }
 
-// TODO: return result
-func parsePostURL(url string) (ownerID vk.UserID, postID uint) {
+func parsePostURL(url string) r.Result[f.Pair[vk.UserID, uint]] {
+	var (
+		ownerID vk.UserID
+		postID  uint
+	)
 	if _, err := fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID); err != nil {
-		log.Println("Error: ", err)
+		return r.Err[f.Pair[vk.UserID, uint]](err)
 	}
-	return
+	return r.Success(f.NewPair(ownerID, postID))
 }
 
 func parseGroupURL(groupURL string) r.Result[string] {
@@ -83,22 +87,25 @@ func main() {
 		Long:  `Find reposters from commenters, group members, likers. Won't find all of reposters.`,
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ownerID, postID := parsePostURL(postURL)
-			r.FoldConsume(
-				vk.GetReposters(&client, ownerID, postID),
-				func(ss s.Stream[vk.Sharer]) {
+			sharersStream := r.FlatMap(
+				parsePostURL(postURL),
+				func(postID f.Pair[vk.UserID, uint]) r.Result[s.Stream[vk.Sharer]] {
+					return vk.GetReposters(&client, postID.Left, postID.Right)
+				},
+			)
+			return r.Fold(
+				sharersStream,
+				func(ss s.Stream[vk.Sharer]) error {
 					s.ForEach(
 						s.Take(ss, 1),
 						func(s vk.Sharer) {
 							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
 						},
 					)
+					return nil
 				},
-				func(err error) {
-					log.Println("Error: ", err)
-				},
+				f.Identity[error],
 			)
-			return nil
 		},
 		Example: "vkutils reposts -u https://vk.com/wall-2158488_651604",
 	}
