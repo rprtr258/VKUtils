@@ -14,7 +14,7 @@ import (
 	s "github.com/rprtr258/goflow/stream"
 )
 
-// UserID is id of some user.
+// UserID is id of some user or group.
 type UserID int
 
 // UserList is a list of users from VK api.
@@ -31,6 +31,7 @@ type Post struct {
 	Owner UserID `json:"owner_id"`
 	ID    uint   `json:"id"`
 	Date  uint   `json:"date"`
+	Text  string `json:"text"`
 }
 
 // VKClient is a client to VK api.
@@ -272,9 +273,17 @@ func (client *VKClient) getPostTime(ownerID UserID, postID uint) i.Result[uint] 
 		userList,
 		func(v V) i.Result[uint] {
 			if len(v.Response) != 1 {
-				return i.Fail[uint](postHiddenError{ownerID, postID})
+				return i.Err[uint](postHiddenError{ownerID, postID})
 			}
 			return i.Success(v.Response[0].Date)
 		},
 	)
+}
+
+func MakeUrlValues(kvs ...string) url.Values {
+	res := make(url.Values)
+	for i := 0; i < len(kvs); i += 2 {
+		res[kvs[i]] = []string{kvs[i+1]}
+	}
+	return res
 }

@@ -3,9 +3,12 @@ version: '3'
 dotenv: [".env"]
 
 tasks:
-  run:
-    cmds:
-      - go run main.go reposts -u https://vk.com/wall-149859311_975
+  reposts:
+    - go run main.go reposts -u https://vk.com/wall-149859311_975
+  revposts:
+    - go run main.go revposts -u https://vk.com/tsgnmdmvn
+  intersect:
+    - go run main.go intersection --friends 168715495 --groups -187839235
   bench:
     dir: tests
     cmds:

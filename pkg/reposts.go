@@ -6,7 +6,7 @@ import (
 	"net/url"
 
 	f "github.com/rprtr258/goflow/fun"
-	i "github.com/rprtr258/goflow/result"
+	r "github.com/rprtr258/goflow/result"
 	s "github.com/rprtr258/goflow/stream"
 )
 
@@ -63,7 +63,7 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 		"offset":   []string{fmt.Sprint(xs.offset)},
 		"count":    []string{xs.countString},
 	})
-	onePageOfPosts := i.FlatMap(body, jsonUnmarshall[WallPosts])
+	onePageOfPosts := r.FlatMap(body, jsonUnmarshall[WallPosts])
 	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
 	// 	errMsg := err.Error()
 	// 	// TODO: change to error structs?
@@ -74,7 +74,7 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 	// 	}
 	// 	return Fail[Repost](err)
 	// })
-	return i.Fold(
+	return r.Fold(
 		onePageOfPosts,
 		func(totalAndFirstBatch WallPosts) f.Option[WallPost] {
 			xs.total, xs.curPage = f.Some(totalAndFirstBatch.Response.Count), s.FromSlice(totalAndFirstBatch.Response.Items)
@@ -171,16 +171,6 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 	return s.Parallel(10, tasks)
 }
 
-// func getSharers(client *VKClient, ownerId UserID, postId uint) s.Stream[UserID] {
-// 	reposts := getSharersAndReposts(client, ownerId, postId)
-// 	return s.Map(
-// 		reposts,
-// 		func(h Sharer) UserID {
-// 			return h.UserID
-// 		},
-// 	)
-// }
-
 func parsePostURL(url string) (ownerID UserID, postID uint) {
 	if _, err := fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID); err != nil {
 		log.Println("Error: ", err)
@@ -188,11 +178,9 @@ func parsePostURL(url string) (ownerID UserID, postID uint) {
 	return
 }
 
-// GetRepostersByPostURL gets reposters by post url.
-func GetRepostersByPostURL(client *VKClient, postURL string) i.Result[s.Stream[Sharer]] {
-	ownerID, postID := parsePostURL(postURL)
+func getSharers0(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[Sharer]] {
 	// TODO: separate modification of post and creation of result
-	return i.Map(
+	return r.Map(
 		client.getPostTime(ownerID, postID),
 		func(postDate uint) s.Stream[Sharer] {
 			uniqueIDs := s.Unique(getPotentialUserIDs(client, ownerID, postID))
@@ -204,3 +192,18 @@ func GetRepostersByPostURL(client *VKClient, postURL string) i.Result[s.Stream[S
 		},
 	)
 }
+
+// GetRepostersByPostURL gets reposters by post url.
+func GetRepostersByPostURL(client *VKClient, postURL string) r.Result[s.Stream[Sharer]] {
+	ownerID, postID := parsePostURL(postURL)
+	return getSharers0(client, ownerID, postID)
+}
+
+// func getSharers(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[UserID]] {
+// 	return r.Map(
+// 		getSharers0(client, ownerID, postID),
+// 		func(hs s.Stream[Sharer]) s.Stream[UserID] {
+// 			return s.Map(hs, func(sh Sharer) UserID { return sh.UserID })
+// 		},
+// 	)
+// }

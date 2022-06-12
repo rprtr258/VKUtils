@@ -5,17 +5,49 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	i "github.com/rprtr258/goflow/result"
+	r "github.com/rprtr258/goflow/result"
 	s "github.com/rprtr258/goflow/stream"
-	vkutils "github.com/rprtr258/vk-utils/pkg"
+	vk "github.com/rprtr258/vk-utils/pkg"
 )
 
+func parseUserIDsList(ls []string) r.Result[[]vk.UserID] {
+	res := make([]vk.UserID, 0, len(ls))
+	for _, id := range ls {
+		userID, err := strconv.ParseInt(id, 10, 32)
+		if err != nil {
+			return r.Err[[]vk.UserID](err)
+		}
+		res = append(res, vk.UserID(userID))
+	}
+	return r.Success(res)
+}
+
+func parsePostsList(ls []string) r.Result[[]vk.PostID] {
+	res := make([]vk.PostID, 0, len(ls))
+	for _, id := range ls {
+		var (
+			ownerID vk.UserID
+			postID  uint
+		)
+		if _, err := fmt.Sscanf(id, "%d_%d", &ownerID, &postID); err != nil {
+			return r.Err[[]vk.PostID](err)
+		}
+		res = append(res, vk.PostID{
+			OwnerID: ownerID,
+			PostID:  postID,
+		})
+	}
+	return r.Success(res)
+}
+
 func main() {
-	var client vkutils.VKClient
+	var client vk.VKClient
 	rootCmd := cobra.Command{
 		Use:   "vkutils",
 		Short: "VK data extraction tools. Need VK_ACCESS_TOKEN env var to work with VK api.",
@@ -23,7 +55,7 @@ func main() {
 			if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
 				return errors.New("VK_ACCESS_TOKEN was not found in env vars")
 			}
-			client = vkutils.NewVKClient(os.Getenv("VK_ACCESS_TOKEN"))
+			client = vk.NewVKClient(os.Getenv("VK_ACCESS_TOKEN"))
 			return nil
 		},
 	}
@@ -35,12 +67,12 @@ func main() {
 		Long:  `Find reposters from commenters, group members, likers. Won't find all of reposters.`,
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			i.FoldConsume(
-				vkutils.GetRepostersByPostURL(&client, postURL),
-				func(ss s.Stream[vkutils.Sharer]) {
+			r.FoldConsume(
+				vk.GetRepostersByPostURL(&client, postURL),
+				func(ss s.Stream[vk.Sharer]) {
 					s.ForEach(
 						s.Take(ss, 1),
-						func(s vkutils.Sharer) {
+						func(s vk.Sharer) {
 							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
 						},
 					)
@@ -60,39 +92,101 @@ func main() {
 	// // TODO: search in different groups, profiles
 	// // https://vk.com/app3876642
 	// // https://vk.com/wall-2158488_651604
-	// var groupUrl string
-	// revPostsUrl := cobra.Command{ // TODO: rename to dump posts
-	// 	Use:   "revposts",
-	// 	Short: "List group posts in reversed order (from old to new).",
-	// 	Args:  cobra.MaximumNArgs(0),
-	// 	RunE: func(cmd *cobra.Command, args []string) error {
-	// 		res, err := vkutils.GetReversedPosts(&client, groupUrl)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		log.Println(res)
-	// 		return nil
-	// 	},
-	// 	Example: "fimgs cluster -n 4 girl.png",
-	// }
-	// revPostsUrl.Flags().StringVarP(&groupUrl, "url", "u", "", "url of vk group")
-	// revPostsUrl.MarkFlagRequired("url")
-	// rootCmd.AddCommand(&revPostsUrl)
+	var groupUrl string
+	revPostsUrl := cobra.Command{ // TODO: rename to dump posts
+		Use:   "revposts",
+		Short: "List group posts in reversed order (from old to new).",
+		Args:  cobra.MaximumNArgs(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r.FoldConsume(
+				vk.GetReversedPosts(&client, groupUrl),
+				func(x s.Stream[vk.Post]) {
+					s.ForEach(
+						x,
+						func(p vk.Post) {
+							fmt.Printf("https://vk.com/wall%d_%d\n", p.Owner, p.ID)
+							fmt.Println("Date: ", time.Unix(int64(p.Date), 0))
+							fmt.Println(p.Text)
+							fmt.Println()
+						},
+					)
+				},
+				func(err error) {
+					fmt.Printf("error: %v", err)
+				},
+			)
+			return nil
+		},
+		Example: "vkutils revposts https://vk.com/abobus_official",
+	}
+	revPostsUrl.Flags().StringVarP(&groupUrl, "url", "u", "", "url of vk group")
+	revPostsUrl.MarkFlagRequired("url")
+	rootCmd.AddCommand(&revPostsUrl)
 
-	// intersectionCmd := cobra.Command{
-	// 	Use:   "intersection",
-	// 	Short: "Find users sets intersection.",
-	// 	Args:  cobra.MaximumNArgs(0),
-	// 	RunE: func(cmd *cobra.Command, args []string) error {
-	// 		res := vkutils.GetIntersection(&client, &json.Decoder{})
-	// 		log.Println(res)
-	// 		return nil
-	// 	},
-	// 	Example: "fimgs cluster -n 4 girl.png",
-	// }
-	// intersectionCmd.Flags().StringVarP(&groupUrl, "url", "u", "", "url of vk group")
-	// intersectionCmd.MarkFlagRequired("url")
-	// rootCmd.AddCommand(&intersectionCmd)
+	var (
+		groups      []string
+		postLikers  []string
+		postSharers []string
+		friends     []string
+		followers   []string
+	)
+	// TODO: union
+	intersectionCmd := cobra.Command{
+		Use:   "intersection",
+		Short: "Find users sets intersection.",
+		Args:  cobra.MaximumNArgs(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var errors []string
+
+			groupIDs := parseUserIDsList(groups)
+			if groupIDs.IsErr() {
+				errors = append(errors, fmt.Sprintf("error parsing group ids: %v", groupIDs.UnwrapErr()))
+			}
+
+			friendIDs := parseUserIDsList(friends)
+			if friendIDs.IsErr() {
+				errors = append(errors, fmt.Sprintf("error parsing friend ids: %v", groupIDs.UnwrapErr()))
+			}
+
+			followerIDs := parseUserIDsList(followers)
+			if followerIDs.IsErr() {
+				errors = append(errors, fmt.Sprintf("error parsing follower ids: %v", groupIDs.UnwrapErr()))
+			}
+
+			postLikerIDs := parsePostsList(postLikers)
+			if postLikerIDs.IsErr() {
+				errors = append(errors, fmt.Sprintf("error parsing post likers ids: %v", groupIDs.UnwrapErr()))
+			}
+
+			postSharerIDs := parsePostsList(postSharers)
+			if postSharerIDs.IsErr() {
+				errors = append(errors, fmt.Sprintf("error parsing post sharers ids: %v", groupIDs.UnwrapErr()))
+			}
+
+			if errors != nil {
+				return fmt.Errorf(strings.Join(errors, "\n"))
+			}
+
+			for userID := range vk.GetIntersection(&client, vk.UserSets{
+				GroupMembers: groupIDs.Unwrap(),
+				Friends:      friendIDs.Unwrap(),
+				Followers:    followerIDs.Unwrap(),
+				Likers:       postLikerIDs.Unwrap(),
+				Sharers:      postSharerIDs.Unwrap(),
+			}) {
+				fmt.Println(userID)
+			}
+			return nil
+		},
+		// TODO: example
+		// Example: "fimgs cluster -n 4 girl.png",
+	}
+	intersectionCmd.Flags().StringSliceVarP(&groups, "groups", "g", []string{}, "group ids members of which to ")
+	intersectionCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
+	intersectionCmd.Flags().StringSliceVarP(&postSharers, "post-sharers", "s", []string{}, "group ids members of which to ")
+	intersectionCmd.Flags().StringSliceVarP(&friends, "friends", "r", []string{}, "group ids members of which to ")
+	intersectionCmd.Flags().StringSliceVarP(&followers, "followers", "w", []string{}, "group ids members of which to ")
+	rootCmd.AddCommand(&intersectionCmd)
 
 	start := time.Now()
 	if err := rootCmd.Execute(); err != nil {
