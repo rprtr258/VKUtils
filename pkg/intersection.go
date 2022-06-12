@@ -39,9 +39,6 @@ func GetIntersection(client *VKClient, include UserSets) f.Set[UserInfo] {
 		s.Map(s.FromSlice(include.Followers), client.getFollowers),
 		s.Map(s.FromSlice(include.Likers), func(postID PostID) s.Stream[UserInfo] { return client.getLikes(postID.OwnerID, postID.PostID) }),
 	))
-
-	// TODO: differentiate between empty map and empty intersection
 	// TODO: find most-intersected user ids?
-	// TODO: iterate over something different, maybe change algo
 	return intersectChans(s.FromSlice(userIDsStreams))
 }
