@@ -1,33 +1,12 @@
 package vkutils
 
 import (
-	"fmt"
 	"log"
-	"net/url"
 
 	f "github.com/rprtr258/goflow/fun"
 	r "github.com/rprtr258/goflow/result"
 	s "github.com/rprtr258/goflow/stream"
 )
-
-// WallPost is post on some user or group wall.
-type WallPost struct {
-	Date        uint `json:"date"`
-	PostID      uint `json:"id"`
-	CopyHistory []struct {
-		PostID  uint   `json:"id"`
-		OwnerID UserID `json:"owner_id"`
-	} `json:"copy_history"`
-}
-
-// WallPosts is a list of posts from user or group wall.
-// TODO: replace with f.Pair[uint, s.Stream[WallPost]].
-type WallPosts struct {
-	Response struct {
-		Count uint       `json:"count"`
-		Items []WallPost `json:"items"`
-	} `json:"response"`
-}
 
 const (
 	wallGetCount       = 100
@@ -36,19 +15,18 @@ const (
 )
 
 type findRepostImplImpl struct {
-	client        *VKClient
-	ownerIDString string
-	offset        uint
-	total         f.Option[uint]
-	countString   string // TODO: remove to urlValues?
-	count         uint
+	client  *VKClient
+	ownerID UserID
+	offset  uint
+	total   f.Option[uint]
+	count   uint
 
-	curPage s.Stream[WallPost]
+	curPage s.Stream[Post]
 }
 
 // TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic.
 // TODO: limit extracted fields.
-func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
+func (xs *findRepostImplImpl) Next() f.Option[Post] {
 	// TODO: move out to flatten
 	if x := xs.curPage.Next(); x.IsSome() {
 		return x
@@ -56,14 +34,14 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 
 	// log.Println("REPOST CHECK", xs.offset)
 	if /*xs.offset > 0*/ xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
-		return f.None[WallPost]()
+		return f.None[Post]()
 	}
-	body := apiRequest(xs.client, "wall.get", url.Values{
-		"owner_id": []string{xs.ownerIDString},
-		"offset":   []string{fmt.Sprint(xs.offset)},
-		"count":    []string{xs.countString},
-	})
-	onePageOfPosts := r.FlatMap(body, jsonUnmarshal[WallPosts])
+	// body := apiRequest(xs.client, "wall.get", url.Values{
+	// 	"owner_id": []string{xs.ownerIDString},
+	// 	"offset":   []string{fmt.Sprint(xs.offset)},
+	// 	"count":    []string{xs.countString},
+	// })
+	onePageOfPosts := xs.client.getWallPosts(xs.offset, xs.count, xs.ownerID)
 	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
 	// 	errMsg := err.Error()
 	// 	// TODO: change to error structs?
@@ -76,7 +54,7 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 	// })
 	return r.Fold(
 		onePageOfPosts,
-		func(totalAndFirstBatch WallPosts) f.Option[WallPost] {
+		func(totalAndFirstBatch WallPosts) f.Option[Post] {
 			xs.total, xs.curPage = f.Some(totalAndFirstBatch.Response.Count), s.FromSlice(totalAndFirstBatch.Response.Items)
 			// if xs.offset == 0 {
 			// 	log.Printf("CHECKING USER %s WITH %d POSTS\n", xs.ownerIDString, totalAndFirstBatch.Response.Count)
@@ -84,50 +62,48 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 			xs.offset += xs.count
 			return xs.curPage.Next()
 		},
-		func(err error) f.Option[WallPost] {
+		func(err error) f.Option[Post] {
 			log.Println("ERROR WHILE GETTING PAGE: ", err)
-			return f.None[WallPost]()
+			return f.None[Post]()
 		},
 	)
 }
 
-func findRepostImpl(client *VKClient, ownerIDString string) s.Stream[WallPost] {
+func findRepostImpl(client *VKClient, ownerID UserID) s.Stream[Post] {
 	return &findRepostImplImpl{
-		client:        client,
-		ownerIDString: ownerIDString,
-		offset:        0,
-		total:         f.None[uint](),
-		count:         wallGetCount,
-		countString:   wallGetCountString,
-		curPage:       s.NewStreamEmpty[WallPost](),
+		client:  client,
+		ownerID: ownerID,
+		offset:  0,
+		total:   f.None[uint](),
+		count:   wallGetCount,
+		curPage: s.NewStreamEmpty[Post](),
 	}
 }
 
 // Returns either found (or not found) repost's post id
 // TODO: binary search?
 func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
-	ownerIDString := fmt.Sprint(userID)
-	allPosts := findRepostImpl(client, ownerIDString)
+	allPosts := findRepostImpl(client, userID)
 	pinnedPostMaybe := s.Head(allPosts)
 	if pinnedPostMaybe.IsNone() {
 		return f.None[uint]()
 	}
 	pinnedPost := pinnedPostMaybe.Unwrap()
-	isRepostPredicate := func(post WallPost) bool {
+	isRepostPredicate := func(post Post) bool {
 		copyHistory := post.CopyHistory
 		return len(copyHistory) != 0 && copyHistory[0].PostID == origPost.ID && copyHistory[0].OwnerID == origPost.Owner
 	}
 	if isRepostPredicate(pinnedPost) {
-		return f.Some(pinnedPost.PostID)
+		return f.Some(pinnedPost.ID)
 	}
 	remainingPosts := s.TakeWhile(
 		allPosts,
-		func(w WallPost) bool {
+		func(w Post) bool {
 			return w.Date >= origPost.Date
 		},
 	)
 	repostMaybe := s.Find(remainingPosts, isRepostPredicate)
-	return f.Map(repostMaybe, func(w WallPost) uint { return w.PostID })
+	return f.Map(repostMaybe, func(w Post) uint { return w.ID })
 }
 
 func userInfoToUserID(info UserInfo) UserID {

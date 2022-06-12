@@ -31,13 +31,25 @@ type UserList struct {
 	} `json:"response"`
 }
 
-// Post is VK wall post.
+// Post is post on some user or group wall.
 // TODO: separate api structs and lib structs(?)
 type Post struct {
-	Owner UserID `json:"owner_id"`
-	ID    uint   `json:"id"`
-	Date  uint   `json:"date"`
-	Text  string `json:"text"`
+	Owner       UserID `json:"owner_id"`
+	ID          uint   `json:"id"`
+	Date        uint   `json:"date"`
+	Text        string `json:"text"`
+	CopyHistory []struct {
+		PostID  uint   `json:"id"`
+		OwnerID UserID `json:"owner_id"`
+	} `json:"copy_history"`
+}
+
+// WallPosts is a list of posts from user or group wall.
+type WallPosts struct {
+	Response struct {
+		Count uint   `json:"count"`
+		Items []Post `json:"items"`
+	} `json:"response"`
 }
 
 // VKClient is a client to VK api.
@@ -247,6 +259,15 @@ func (client *VKClient) getFollowers(userId UserID) s.Stream[UserInfo] {
 		"user_id", fmt.Sprint(userId),
 		"fields", "first_name,last_name",
 	), 1000)
+}
+
+func (client *VKClient) getWallPosts(offset uint, count uint, ownerID UserID) r.Result[WallPosts] {
+	body := apiRequest(client, "wall.get", url.Values{
+		"owner_id": []string{fmt.Sprint(ownerID)},
+		"offset":   []string{fmt.Sprint(offset)},
+		"count":    []string{fmt.Sprint(count)},
+	})
+	return r.FlatMap(body, jsonUnmarshal[WallPosts])
 }
 
 type postHiddenError struct {
