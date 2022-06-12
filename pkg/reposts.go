@@ -182,7 +182,7 @@ func parsePostURL(url string) (ownerID UserID, postID uint) {
 	return
 }
 
-func getSharers0(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[Sharer]] {
+func getSharers(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[Sharer]] {
 	// TODO: separate modification of post and creation of result
 	return r.Map(
 		client.getPostTime(ownerID, postID),
@@ -200,14 +200,5 @@ func getSharers0(client *VKClient, ownerID UserID, postID uint) r.Result[s.Strea
 // GetRepostersByPostURL gets reposters by post url.
 func GetRepostersByPostURL(client *VKClient, postURL string) r.Result[s.Stream[Sharer]] {
 	ownerID, postID := parsePostURL(postURL)
-	return getSharers0(client, ownerID, postID)
+	return getSharers(client, ownerID, postID)
 }
-
-// func getSharers(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[UserID]] {
-// 	return r.Map(
-// 		getSharers0(client, ownerID, postID),
-// 		func(hs s.Stream[Sharer]) s.Stream[UserID] {
-// 			return s.Map(hs, func(sh Sharer) UserID { return sh.UserID })
-// 		},
-// 	)
-// }

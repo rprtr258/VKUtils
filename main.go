@@ -124,11 +124,10 @@ func main() {
 	rootCmd.AddCommand(&revPostsUrl)
 
 	var (
-		groups      []string
-		postLikers  []string
-		postSharers []string
-		friends     []string
-		followers   []string
+		groups     []string
+		postLikers []string
+		friends    []string
+		followers  []string
 	)
 	// TODO: union
 	intersectionCmd := cobra.Command{
@@ -145,22 +144,17 @@ func main() {
 
 			friendIDs := parseUserIDsList(friends)
 			if friendIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing friend ids: %v", groupIDs.UnwrapErr()))
+				errors = append(errors, fmt.Sprintf("error parsing friend ids: %v", friendIDs.UnwrapErr()))
 			}
 
 			followerIDs := parseUserIDsList(followers)
 			if followerIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing follower ids: %v", groupIDs.UnwrapErr()))
+				errors = append(errors, fmt.Sprintf("error parsing follower ids: %v", followerIDs.UnwrapErr()))
 			}
 
 			postLikerIDs := parsePostsList(postLikers)
 			if postLikerIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing post likers ids: %v", groupIDs.UnwrapErr()))
-			}
-
-			postSharerIDs := parsePostsList(postSharers)
-			if postSharerIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing post sharers ids: %v", groupIDs.UnwrapErr()))
+				errors = append(errors, fmt.Sprintf("error parsing post likers ids: %v", postLikerIDs.UnwrapErr()))
 			}
 
 			if errors != nil {
@@ -172,7 +166,6 @@ func main() {
 				Friends:      friendIDs.Unwrap(),
 				Followers:    followerIDs.Unwrap(),
 				Likers:       postLikerIDs.Unwrap(),
-				Sharers:      postSharerIDs.Unwrap(),
 			}) {
 				fmt.Printf("%d: %s %s\n", userInfo.ID, userInfo.FirstName, userInfo.SecondName)
 			}
@@ -183,7 +176,6 @@ func main() {
 	}
 	intersectionCmd.Flags().StringSliceVarP(&groups, "groups", "g", []string{}, "group ids members of which to ")
 	intersectionCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
-	intersectionCmd.Flags().StringSliceVarP(&postSharers, "post-sharers", "s", []string{}, "group ids members of which to ")
 	intersectionCmd.Flags().StringSliceVarP(&friends, "friends", "r", []string{}, "group ids members of which to ")
 	intersectionCmd.Flags().StringSliceVarP(&followers, "followers", "w", []string{}, "group ids members of which to ")
 	rootCmd.AddCommand(&intersectionCmd)

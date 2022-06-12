@@ -27,31 +27,18 @@ type UserSets struct {
 	Friends      []UserID
 	Followers    []UserID
 	Likers       []PostID
-	Sharers      []PostID // TODO: check inexactly
 	// TODO: user provided
 	// TODO: commenters
 }
 
 func GetIntersection(client *VKClient, include UserSets) f.Set[UserInfo] {
 	// TODO: parallelize
-	userIDsStreams := make(
-		[]s.Stream[UserInfo],
-		0,
-		len(include.GroupMembers)+len(include.Friends)+len(include.Followers)+len(include.Likers)+len(include.Sharers),
-	)
-	for _, userID := range include.Friends {
-		userIDsStreams = append(userIDsStreams, client.getFriends(userID))
-	}
-	for _, groupID := range include.GroupMembers {
-		userIDsStreams = append(userIDsStreams, client.getGroupMembers(groupID))
-	}
-	for _, userID := range include.Followers {
-		userIDsStreams = append(userIDsStreams, client.getFollowers(userID))
-	}
-	for _, postID := range include.Likers {
-		userIDsStreams = append(userIDsStreams, client.getLikes(postID.OwnerID, postID.PostID))
-	}
-	// postSet    Sharers      getSharers(client, postSet.OwnerId, postSet.PostId).Unwrap()
+	userIDsStreams := s.CollectToSlice(s.Chain(
+		s.Map(s.FromSlice(include.Friends), client.getFriends),
+		s.Map(s.FromSlice(include.GroupMembers), client.getGroupMembers),
+		s.Map(s.FromSlice(include.Followers), client.getFollowers),
+		s.Map(s.FromSlice(include.Likers), func(postID PostID) s.Stream[UserInfo] { return client.getLikes(postID.OwnerID, postID.PostID) }),
+	))
 
 	// TODO: differentiate between empty map and empty intersection
 	// TODO: find most-intersected user ids?
