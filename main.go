@@ -167,14 +167,14 @@ func main() {
 				return fmt.Errorf(strings.Join(errors, "\n"))
 			}
 
-			for userID := range vk.GetIntersection(&client, vk.UserSets{
+			for userInfo := range vk.GetIntersection(&client, vk.UserSets{
 				GroupMembers: groupIDs.Unwrap(),
 				Friends:      friendIDs.Unwrap(),
 				Followers:    followerIDs.Unwrap(),
 				Likers:       postLikerIDs.Unwrap(),
 				Sharers:      postSharerIDs.Unwrap(),
 			}) {
-				fmt.Println(userID)
+				fmt.Printf("%d: %s %s\n", userInfo.ID, userInfo.FirstName, userInfo.SecondName)
 			}
 			return nil
 		},

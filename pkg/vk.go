@@ -17,11 +17,17 @@ import (
 // UserID is id of some user or group.
 type UserID int
 
+type UserInfo struct {
+	ID         UserID `json:"id"`
+	FirstName  string `json:"first_name"`
+	SecondName string `json:"last_name"`
+}
+
 // UserList is a list of users from VK api.
 type UserList struct {
 	Response struct {
-		Count uint     `json:"count"`
-		Items []UserID `json:"items"`
+		Count uint       `json:"count"`
+		Items []UserInfo `json:"items"`
 	} `json:"response"`
 }
 
@@ -167,43 +173,37 @@ type userListImpl struct {
 	params    url.Values
 	urlParams url.Values
 
-	curPage s.Stream[UserID]
+	curPage s.Stream[UserInfo]
 }
 
-func (xs *userListImpl) Next() (xxx f.Option[UserID]) {
+func (xs *userListImpl) Next() (xxx f.Option[UserInfo]) {
 	if x := xs.curPage.Next(); x.IsSome() {
 		return x
 	}
 
 	if xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
-		return f.None[UserID]()
+		return f.None[UserInfo]()
 	}
 	// log.Println("GET USER LIST", xs.offset, xs.total)
 	xs.urlParams.Set("offset", fmt.Sprint(xs.offset))
 	body := apiRequest(xs.client, xs.method, xs.urlParams)
-	userList := i.FlatMap(body, jsonUnmarshal[UserList])
-	onePageOfUsers := i.Map(
-		userList,
-		func(v UserList) f.Pair[uint, s.Stream[UserID]] {
-			return f.NewPair(v.Response.Count, s.FromSlice(v.Response.Items))
-		},
-	)
+	onePageOfUsers := i.FlatMap(body, jsonUnmarshal[UserList])
 	return i.Fold(
 		onePageOfUsers,
-		func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) f.Option[UserID] {
+		func(batch UserList) f.Option[UserInfo] {
 			xs.offset += xs.count
-			xs.total, xs.curPage = f.Some(totalAndFirstBatch.Left), totalAndFirstBatch.Right
+			xs.total, xs.curPage = f.Some(batch.Response.Count), s.FromSlice(batch.Response.Items)
 			return xs.curPage.Next()
 		},
-		func(err error) f.Option[UserID] {
+		func(err error) f.Option[UserInfo] {
 			log.Println("ERROR WHILE GETTING PAGE: ", err)
-			return f.None[UserID]()
+			return f.None[UserInfo]()
 		},
 	)
 }
 
 // TODO: merge method and count in one structure
-func (client *VKClient) getUserList(method string, params url.Values, pageSize uint) s.Stream[UserID] {
+func (client *VKClient) getUserList(method string, params url.Values, pageSize uint) s.Stream[UserInfo] {
 	pageSizeStr := fmt.Sprint(pageSize)
 	urlParams := make(url.Values)
 	for k, v := range params {
@@ -218,32 +218,32 @@ func (client *VKClient) getUserList(method string, params url.Values, pageSize u
 		offset:    0,
 		total:     f.None[uint](),
 		urlParams: urlParams,
-		curPage:   s.NewStreamEmpty[UserID](),
+		curPage:   s.NewStreamEmpty[UserInfo](),
 	}
 }
 
 // TODO: group id is groupid, user id is userid
-func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[UserID] {
+func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[UserInfo] {
 	return client.getUserList("groups.getMembers", url.Values{
 		"group_id": []string{fmt.Sprint(-groupID)},
-		// "fields":   []string{"first_name,last_name"},
+		"fields":   []string{"first_name,last_name"},
 	}, groupsGetMembersLimit)
 }
 
-func (client *VKClient) getFriends(userID UserID) s.Stream[UserID] {
+func (client *VKClient) getFriends(userID UserID) s.Stream[UserInfo] {
 	return client.getUserList("friends.get", url.Values{
 		"user_id": []string{fmt.Sprint(userID)},
-		// "fields":  []string{"first_name,last_name"},
+		"fields":  []string{"first_name,last_name"},
 	}, getFriendsLimit)
 }
 
-func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[UserID] {
+func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[UserInfo] {
 	return client.getUserList("likes.getList", url.Values{
 		"type":     []string{"post"},
 		"owner_id": []string{fmt.Sprint(ownerID)},
 		"item_id":  []string{fmt.Sprint(postID)},
 		"skip_own": []string{"0"},
-		// "fields":   []string{"first_name,last_name"},
+		"fields":   []string{"first_name,last_name"},
 	}, getLikesListLimit)
 }
 

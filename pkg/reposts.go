@@ -130,19 +130,23 @@ func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
 	return f.Map(repostMaybe, func(w WallPost) uint { return w.PostID })
 }
 
+func userInfoToUserID(info UserInfo) UserID {
+	return info.ID
+}
+
 func getPotentialUserIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID] {
 	// TODO: add commenters?
 
 	// scan likers
-	likers := client.getLikes(ownerID, postID)
+	likers := s.Map(client.getLikes(ownerID, postID), userInfoToUserID)
 
 	// TODO: "Error(15) Access denied: group hide members"
 	// scan group members/friends of post owner
 	var potentialUserIDs s.Stream[UserID]
 	if ownerID < 0 { // owner is group
-		potentialUserIDs = client.getGroupMembers(ownerID)
+		potentialUserIDs = s.Map(client.getGroupMembers(ownerID), userInfoToUserID)
 	} else { // owner is user
-		potentialUserIDs = client.getFriends(ownerID)
+		potentialUserIDs = s.Map(client.getFriends(ownerID), userInfoToUserID)
 	}
 
 	return s.Chain(likers, potentialUserIDs)

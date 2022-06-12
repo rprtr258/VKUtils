@@ -8,7 +8,7 @@ import (
 	s "github.com/rprtr258/goflow/stream"
 )
 
-type UserSet = f.Set[UserID]
+type UserSet = f.Set[UserInfo]
 
 // func getFollowers(client *VKClient, userId UserID) s.Stream[UserID] {
 // 	return client.getUserList("users.getFollowers", url.Values{
@@ -16,10 +16,10 @@ type UserSet = f.Set[UserID]
 // 	}, 1000)
 // }
 
-func intersectChans(chans s.Stream[s.Stream[UserID]]) UserSet {
+func intersectChans(chans s.Stream[s.Stream[UserInfo]]) UserSet {
 	first := s.CollectToSet(chans.Next().Unwrap())
-	sets := s.Map(chans, s.CollectToSet[UserID])
-	return s.Reduce(first, f.Intersect[UserID], sets)
+	sets := s.Map(chans, s.CollectToSet[UserInfo])
+	return s.Reduce(first, f.Intersect[UserInfo], sets)
 }
 
 type PostID struct {
@@ -37,11 +37,10 @@ type UserSets struct {
 	// TODO: commenters
 }
 
-// TODO: also return users info if api gives it anyway (e.g. names)
-func GetIntersection(client *VKClient, include UserSets) f.Set[UserID] {
+func GetIntersection(client *VKClient, include UserSets) f.Set[UserInfo] {
 	// TODO: parallelize
 	userIDsStreams := make(
-		[]s.Stream[UserID],
+		[]s.Stream[UserInfo],
 		0,
 		len(include.GroupMembers)+len(include.Friends)+len(include.Followers)+len(include.Likers)+len(include.Sharers),
 	)
