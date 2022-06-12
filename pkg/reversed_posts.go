@@ -38,21 +38,21 @@ func GetReversedPosts(client *VKClient, groupName string) r.Result[s.Stream[Post
 		func(groupID UserID) r.Result[s.Stream[Post]] {
 			return r.FlatMap3(
 				r.Map(r.FlatMap(
-					r.FromGoResult(client.apiRequestRaw("wall.get", url.Values{
+					client.apiRequest("wall.get", url.Values{
 						"owner_id": []string{fmt.Sprint(groupID)},
 						"offset":   []string{"0"},
 						"count":    []string{"1"},
-					})),
+					}),
 					jsonUnmarshal[V],
 				), func(v V) uint {
 					return v.Response.Count
 				}),
 				func(postsCount uint) r.Result[[]byte] {
-					return r.FromGoResult(client.apiRequestRaw("wall.get", MakeUrlValues(
+					return client.apiRequest("wall.get", MakeUrlValues(
 						"owner_id", fmt.Sprint(groupID),
 						"offset", fmt.Sprint(max0XminusY(postsCount, maxPostsCount)),
 						"count", fmt.Sprint(maxPostsCount),
-					)))
+					))
 				},
 				jsonUnmarshal[W],
 				func(w W) r.Result[s.Stream[Post]] {

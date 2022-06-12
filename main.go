@@ -97,7 +97,7 @@ func main() {
 				sharersStream,
 				func(ss s.Stream[vk.Sharer]) error {
 					s.ForEach(
-						s.Take(ss, 1),
+						s.Take(ss, 1), // TODO: remove
 						func(s vk.Sharer) {
 							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
 						},

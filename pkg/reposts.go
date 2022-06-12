@@ -57,7 +57,7 @@ func (xs *findRepostImplImpl) Next() f.Option[Post] {
 		func(totalAndFirstBatch WallPosts) f.Option[Post] {
 			xs.total, xs.curPage = f.Some(totalAndFirstBatch.Response.Count), s.FromSlice(totalAndFirstBatch.Response.Items)
 			// if xs.offset == 0 {
-			// 	log.Printf("CHECKING USER %s WITH %d POSTS\n", xs.ownerIDString, totalAndFirstBatch.Response.Count)
+			// 	log.Printf("CHECKING USER %d WITH %d POSTS\n", xs.ownerID, totalAndFirstBatch.Response.Count)
 			// }
 			xs.offset += xs.count
 			return xs.curPage.Next()

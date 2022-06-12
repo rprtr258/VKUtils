@@ -14,6 +14,29 @@ import (
 	s "github.com/rprtr258/goflow/stream"
 )
 
+// vk api constants
+const (
+	// getUserListThreads     = 10
+	groupsGetMembersLimit = 1000
+	getFriendsLimit       = 5000
+	getLikesListLimit     = 1000
+)
+
+// vk api error codes
+const (
+	tooManyRequests = 6
+	accessDenied    = 15
+	userBanned      = 18
+	userHidden      = 30
+)
+
+// application constants
+const (
+	apiVersion        = "5.131"
+	apiRequestRetries = 100
+	waitTimeToRetry   = time.Millisecond * 500
+)
+
 // UserID is id of some user or group.
 type UserID int
 
@@ -58,6 +81,15 @@ type VKClient struct {
 	client      http.Client
 }
 
+type postHiddenError struct {
+	ownerID UserID
+	postID  uint
+}
+
+func (p postHiddenError) Error() string {
+	return fmt.Sprintf("Post %d_%d is hidden", p.ownerID, p.postID)
+}
+
 // NewVKClient creates new VKClient.
 func NewVKClient(accessToken string) VKClient {
 	return VKClient{
@@ -66,34 +98,11 @@ func NewVKClient(accessToken string) VKClient {
 	}
 }
 
-// vk api constants
-const (
-	// getUserListThreads     = 10
-	groupsGetMembersLimit = 1000
-	getFriendsLimit       = 5000
-	getLikesListLimit     = 1000
-)
-
-// application constants
-const (
-	apiVersion        = "5.131"
-	apiRequestRetries = 100
-	waitTimeToRetry   = time.Millisecond * 500
-)
-
 // VkError is vk api error.
 type VkError struct {
 	Code    uint   `json:"error_code"`
 	Message string `json:"error_msg"`
 }
-
-// vk api error codes
-const (
-	tooManyRequests = 6
-	accessDenied    = 15
-	userBanned      = 18
-	userHidden      = 30
-)
 
 func (err *VkError) Error() string {
 	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
@@ -111,11 +120,11 @@ func jsonUnmarshal[J any](body []byte) r.Result[J] {
 }
 
 // TODO: print request, response, timing
-func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []byte, err error) {
+func (client *VKClient) apiRequest(method string, params url.Values) r.Result[[]byte] {
 	url := fmt.Sprintf("https://api.vk.com/method/%s", method)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return
+		return r.Err[[]byte](err)
 	}
 	reqParams := req.URL.Query()
 	reqParams.Add("v", apiVersion)
@@ -131,16 +140,16 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 		if err != nil {
 			// if user hid their wall
 			// TODO: fix, not working
-			return
+			return r.Err[[]byte](err)
 		}
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
 				log.Println(err)
 			}
 		}()
-		body, err = io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return
+			return r.Err[[]byte](err)
 		}
 		// log.Println("ON ", method, " ", params, " GOT:\n", string(body))
 		// move out parsing response
@@ -149,7 +158,7 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 		}
 		errr := jsonUnmarshal[Errrr](body)
 		if errr.IsErr() {
-			return nil, errr.UnwrapErr()
+			return r.Err[[]byte](err)
 		}
 		v := errr.Unwrap()
 		if v.Err.Code != 0 {
@@ -159,20 +168,14 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 				time.Sleep(waitTimeToRetry)
 				continue
 			case v.Err.Code == accessDenied || v.Err.Code == userBanned || v.Err.Code == userHidden:
-				return
+				return r.Success(body) // TODO: ???
 			default:
-				err = fmt.Errorf("%s(%v) = Error(%d) %s", method, params, v.Err.Code, v.Err.Message)
+				return r.Err[[]byte](fmt.Errorf("%s(%v) = Error(%d) %s", method, params, v.Err.Code, v.Err.Message))
 			}
-			return
 		}
-		return
+		return r.Success(body) // TODO: ???
 	}
-	err = fmt.Errorf("%s(%v) = Timeout", method, params)
-	return
-}
-
-func apiRequest(client *VKClient, method string, params url.Values) r.Result[[]byte] {
-	return r.FromGoResult(client.apiRequestRaw(method, params))
+	return r.Err[[]byte](fmt.Errorf("%s(%v) = Timeout", method, params))
 }
 
 type userListImpl struct {
@@ -196,7 +199,7 @@ func (xs *userListImpl) Next() (xxx f.Option[UserInfo]) {
 	}
 	// log.Println("GET USER LIST", xs.offset, xs.total)
 	xs.urlParams.Set("offset", fmt.Sprint(xs.offset))
-	body := apiRequest(xs.client, xs.method, xs.urlParams)
+	body := xs.client.apiRequest(xs.method, xs.urlParams)
 	onePageOfUsers := r.FlatMap(body, jsonUnmarshal[UserList])
 	return r.Fold(
 		onePageOfUsers,
@@ -262,7 +265,7 @@ func (client *VKClient) getFollowers(userId UserID) s.Stream[UserInfo] {
 }
 
 func (client *VKClient) getWallPosts(offset uint, count uint, ownerID UserID) r.Result[WallPosts] {
-	body := apiRequest(client, "wall.get", url.Values{
+	body := client.apiRequest("wall.get", url.Values{
 		"owner_id": []string{fmt.Sprint(ownerID)},
 		"offset":   []string{fmt.Sprint(offset)},
 		"count":    []string{fmt.Sprint(count)},
@@ -270,17 +273,8 @@ func (client *VKClient) getWallPosts(offset uint, count uint, ownerID UserID) r.
 	return r.FlatMap(body, jsonUnmarshal[WallPosts])
 }
 
-type postHiddenError struct {
-	ownerID UserID
-	postID  uint
-}
-
-func (p postHiddenError) Error() string {
-	return fmt.Sprintf("Post %d_%d is hidden", p.ownerID, p.postID)
-}
-
 func (client *VKClient) getPostTime(ownerID UserID, postID uint) r.Result[uint] {
-	body := apiRequest(client, "wall.getById", url.Values{
+	body := client.apiRequest("wall.getById", url.Values{
 		"posts": []string{fmt.Sprintf("%d_%d", ownerID, postID)},
 	})
 	type V struct {
@@ -311,7 +305,7 @@ func (client *VKClient) getGroupID(groupName string) r.Result[UserID] {
 	}
 
 	vR := r.FlatMap(
-		r.FromGoResult(client.apiRequestRaw("groups.getById", MakeUrlValues("group_id", groupName))),
+		client.apiRequest("groups.getById", MakeUrlValues("group_id", groupName)),
 		jsonUnmarshal[V],
 	)
 	return r.Map(vR, func(v V) UserID { return UserID(-v.Response[0].ID) })
