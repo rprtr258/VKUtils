@@ -10,7 +10,7 @@ import (
 	"time"
 
 	f "github.com/rprtr258/goflow/fun"
-	i "github.com/rprtr258/goflow/result"
+	r "github.com/rprtr258/goflow/result"
 	s "github.com/rprtr258/goflow/stream"
 )
 
@@ -87,8 +87,8 @@ func (err *VkError) Error() string {
 	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
 }
 
-func jsonUnmarshal[J any](body []byte) i.Result[J] {
-	return i.Eval(func() (J, error) {
+func jsonUnmarshal[J any](body []byte) r.Result[J] {
+	return r.Eval(func() (J, error) {
 		var j J
 		err := json.Unmarshal(body, &j)
 		if err != nil {
@@ -159,8 +159,8 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 	return
 }
 
-func apiRequest(client *VKClient, method string, params url.Values) i.Result[[]byte] {
-	return i.FromGoResult(client.apiRequestRaw(method, params))
+func apiRequest(client *VKClient, method string, params url.Values) r.Result[[]byte] {
+	return r.FromGoResult(client.apiRequestRaw(method, params))
 }
 
 type userListImpl struct {
@@ -185,8 +185,8 @@ func (xs *userListImpl) Next() (xxx f.Option[UserInfo]) {
 	// log.Println("GET USER LIST", xs.offset, xs.total)
 	xs.urlParams.Set("offset", fmt.Sprint(xs.offset))
 	body := apiRequest(xs.client, xs.method, xs.urlParams)
-	onePageOfUsers := i.FlatMap(body, jsonUnmarshal[UserList])
-	return i.Fold(
+	onePageOfUsers := r.FlatMap(body, jsonUnmarshal[UserList])
+	return r.Fold(
 		onePageOfUsers,
 		func(batch UserList) f.Option[UserInfo] {
 			xs.offset += xs.count
@@ -260,7 +260,7 @@ func (p postHiddenError) Error() string {
 	return fmt.Sprintf("Post %d_%d is hidden", p.ownerID, p.postID)
 }
 
-func (client *VKClient) getPostTime(ownerID UserID, postID uint) i.Result[uint] {
+func (client *VKClient) getPostTime(ownerID UserID, postID uint) r.Result[uint] {
 	body := apiRequest(client, "wall.getById", url.Values{
 		"posts": []string{fmt.Sprintf("%d_%d", ownerID, postID)},
 	})
@@ -272,16 +272,30 @@ func (client *VKClient) getPostTime(ownerID UserID, postID uint) i.Result[uint] 
 			} `json:"reposts"`
 		} `json:"response"`
 	}
-	userList := i.FlatMap(body, jsonUnmarshal[V])
-	return i.FlatMap(
+	userList := r.FlatMap(body, jsonUnmarshal[V])
+	return r.FlatMap(
 		userList,
-		func(v V) i.Result[uint] {
+		func(v V) r.Result[uint] {
 			if len(v.Response) != 1 {
-				return i.Err[uint](postHiddenError{ownerID, postID})
+				return r.Err[uint](postHiddenError{ownerID, postID})
 			}
-			return i.Success(v.Response[0].Date)
+			return r.Success(v.Response[0].Date)
 		},
 	)
+}
+
+func (client *VKClient) getGroupID(groupName string) r.Result[UserID] {
+	type V struct {
+		Response []struct {
+			ID int `json:"id"`
+		} `json:"response"`
+	}
+
+	vR := r.FlatMap(
+		r.FromGoResult(client.apiRequestRaw("groups.getById", MakeUrlValues("group_id", groupName))),
+		jsonUnmarshal[V],
+	)
+	return r.Map(vR, func(v V) UserID { return UserID(-v.Response[0].ID) })
 }
 
 func MakeUrlValues(kvs ...string) url.Values {

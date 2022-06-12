@@ -8,14 +8,6 @@ import (
 	s "github.com/rprtr258/goflow/stream"
 )
 
-type UserSet = f.Set[UserInfo]
-
-func intersectChans(chans s.Stream[s.Stream[UserInfo]]) UserSet {
-	first := s.CollectToSet(chans.Next().Unwrap())
-	sets := s.Map(chans, s.CollectToSet[UserInfo])
-	return s.Reduce(first, f.Intersect[UserInfo], sets)
-}
-
 // PostID is pair of post author ID and post index.
 type PostID struct {
 	OwnerID UserID
@@ -39,6 +31,9 @@ func GetIntersection(client *VKClient, include UserSets) f.Set[UserInfo] {
 		s.Map(s.FromSlice(include.Followers), client.getFollowers),
 		s.Map(s.FromSlice(include.Likers), func(postID PostID) s.Stream[UserInfo] { return client.getLikes(postID.OwnerID, postID.PostID) }),
 	))
+	chans := s.FromSlice(userIDsStreams)
 	// TODO: find most-intersected user ids?
-	return intersectChans(s.FromSlice(userIDsStreams))
+	first := s.CollectToSet(chans.Next().Unwrap())
+	sets := s.Map(chans, s.CollectToSet[UserInfo])
+	return s.Reduce(first, f.Intersect[UserInfo], sets)
 }

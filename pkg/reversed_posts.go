@@ -31,12 +31,6 @@ func getPostsCount(client *VKClient, userID UserID) r.Result[uint] {
 	})
 }
 
-type V struct {
-	Response []struct {
-		ID int `json:"id"`
-	} `json:"response"`
-}
-
 type W struct {
 	Response struct {
 		Items []Post `json:"items"`
@@ -53,14 +47,8 @@ func max0XminusY(x uint, y uint) uint {
 // GetReversedPosts gets reversed posts from group.
 // TODO: fix to really get all posts
 func GetReversedPosts(client *VKClient, groupName string) r.Result[s.Stream[Post]] {
-	// TODO: move out getting group id by name
-	vR := r.FlatMap(
-		r.FromGoResult(client.apiRequestRaw("groups.getById", MakeUrlValues("group_id", groupName))),
-		jsonUnmarshal[V],
-	)
-	groupIDR := r.Map(vR, func(v V) UserID { return UserID(-v.Response[0].ID) })
 	return r.FlatMap(
-		groupIDR,
+		client.getGroupID(groupName),
 		func(groupID UserID) r.Result[s.Stream[Post]] {
 			return r.FlatMap3(
 				getPostsCount(client, groupID),
