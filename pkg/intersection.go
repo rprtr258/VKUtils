@@ -10,12 +10,6 @@ import (
 
 type UserSet = f.Set[UserInfo]
 
-// func getFollowers(client *VKClient, userId UserID) s.Stream[UserID] {
-// 	return client.getUserList("users.getFollowers", url.Values{
-// 		"user_id": []string{fmt.Sprint(userId)},
-// 	}, 1000)
-// }
-
 func intersectChans(chans s.Stream[s.Stream[UserInfo]]) UserSet {
 	first := s.CollectToSet(chans.Next().Unwrap())
 	sets := s.Map(chans, s.CollectToSet[UserInfo])
@@ -31,7 +25,7 @@ type PostID struct {
 type UserSets struct {
 	GroupMembers []UserID
 	Friends      []UserID
-	Followers    []UserID // TODO: implement
+	Followers    []UserID
 	Likers       []PostID
 	Sharers      []PostID // TODO: check inexactly
 	// TODO: user provided
@@ -51,10 +45,12 @@ func GetIntersection(client *VKClient, include UserSets) f.Set[UserInfo] {
 	for _, groupID := range include.GroupMembers {
 		userIDsStreams = append(userIDsStreams, client.getGroupMembers(groupID))
 	}
+	for _, userID := range include.Followers {
+		userIDsStreams = append(userIDsStreams, client.getFollowers(userID))
+	}
 	for _, postID := range include.Likers {
 		userIDsStreams = append(userIDsStreams, client.getLikes(postID.OwnerID, postID.PostID))
 	}
-	// profileSet Followers    getFollowers(client, profileSet.UserId)
 	// postSet    Sharers      getSharers(client, postSet.OwnerId, postSet.PostId).Unwrap()
 
 	// TODO: differentiate between empty map and empty intersection

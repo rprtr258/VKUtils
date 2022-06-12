@@ -221,27 +221,34 @@ func (client *VKClient) getUserList(method string, params url.Values, pageSize u
 
 // TODO: group id is groupid, user id is userid
 func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[UserInfo] {
-	return client.getUserList("groups.getMembers", url.Values{
-		"group_id": []string{fmt.Sprint(-groupID)},
-		"fields":   []string{"first_name,last_name"},
-	}, groupsGetMembersLimit)
+	return client.getUserList("groups.getMembers", MakeUrlValues(
+		"group_id", fmt.Sprint(-groupID),
+		"fields", "first_name,last_name",
+	), groupsGetMembersLimit)
 }
 
 func (client *VKClient) getFriends(userID UserID) s.Stream[UserInfo] {
-	return client.getUserList("friends.get", url.Values{
-		"user_id": []string{fmt.Sprint(userID)},
-		"fields":  []string{"first_name,last_name"},
-	}, getFriendsLimit)
+	return client.getUserList("friends.get", MakeUrlValues(
+		"user_id", fmt.Sprint(userID),
+		"fields", "first_name,last_name",
+	), getFriendsLimit)
 }
 
 func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[UserInfo] {
-	return client.getUserList("likes.getList", url.Values{
-		"type":     []string{"post"},
-		"owner_id": []string{fmt.Sprint(ownerID)},
-		"item_id":  []string{fmt.Sprint(postID)},
-		"skip_own": []string{"0"},
-		"extended": []string{"1"},
-	}, getLikesListLimit)
+	return client.getUserList("likes.getList", MakeUrlValues(
+		"type", "post",
+		"owner_id", fmt.Sprint(ownerID),
+		"item_id", fmt.Sprint(postID),
+		"skip_own", "0",
+		"extended", "1",
+	), getLikesListLimit)
+}
+
+func (client *VKClient) getFollowers(userId UserID) s.Stream[UserInfo] {
+	return client.getUserList("users.getFollowers", MakeUrlValues(
+		"user_id", fmt.Sprint(userId),
+		"fields", "first_name,last_name",
+	), 1000)
 }
 
 type postHiddenError struct {
