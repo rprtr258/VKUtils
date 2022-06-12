@@ -200,7 +200,6 @@ func (xs *userListImpl) Next() (xxx f.Option[UserInfo]) {
 	)
 }
 
-// TODO: merge method and count in one structure
 func (client *VKClient) getUserList(method string, params url.Values, pageSize uint) s.Stream[UserInfo] {
 	pageSizeStr := fmt.Sprint(pageSize)
 	urlParams := make(url.Values)
