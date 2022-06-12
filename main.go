@@ -196,8 +196,7 @@ func main() {
 			}
 			return nil
 		},
-		// TODO: example
-		// Example: "fimgs cluster -n 4 girl.png",
+		Example: "vkutils intersection --friends 168715495 --groups -187839235 --post-likers 107904132_1371",
 	}
 	intersectionCmd.Flags().StringSliceVarP(&groups, "groups", "g", []string{}, "group ids members of which to ")
 	intersectionCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
