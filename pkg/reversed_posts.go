@@ -10,27 +10,6 @@ import (
 
 const maxPostsCount = 100
 
-// TODO: replace with get-from-first also.
-func getPostsCount(client *VKClient, userID UserID) r.Result[uint] {
-	ownerIDString := fmt.Sprint(userID)
-	type V struct {
-		Response struct {
-			Count uint `json:"count"`
-		} `json:"response"`
-	}
-	v := r.FlatMap(
-		r.FromGoResult(client.apiRequestRaw("wall.get", url.Values{
-			"owner_id": []string{ownerIDString},
-			"offset":   []string{"0"},
-			"count":    []string{"1"},
-		})),
-		jsonUnmarshal[V],
-	)
-	return r.Map(v, func(v V) uint {
-		return v.Response.Count
-	})
-}
-
 type W struct {
 	Response struct {
 		Items []Post `json:"items"`
@@ -44,14 +23,30 @@ func max0XminusY(x uint, y uint) uint {
 	return x - y
 }
 
+type V struct {
+	Response struct {
+		Count uint `json:"count"`
+	} `json:"response"`
+}
+
 // GetReversedPosts gets reversed posts from group.
+// TODO: replace with get-from-first also.
 // TODO: fix to really get all posts
 func GetReversedPosts(client *VKClient, groupName string) r.Result[s.Stream[Post]] {
 	return r.FlatMap(
 		client.getGroupID(groupName),
 		func(groupID UserID) r.Result[s.Stream[Post]] {
 			return r.FlatMap3(
-				getPostsCount(client, groupID),
+				r.Map(r.FlatMap(
+					r.FromGoResult(client.apiRequestRaw("wall.get", url.Values{
+						"owner_id": []string{fmt.Sprint(groupID)},
+						"offset":   []string{"0"},
+						"count":    []string{"1"},
+					})),
+					jsonUnmarshal[V],
+				), func(v V) uint {
+					return v.Response.Count
+				}),
 				func(postsCount uint) r.Result[[]byte] {
 					return r.FromGoResult(client.apiRequestRaw("wall.get", MakeUrlValues(
 						"owner_id", fmt.Sprint(groupID),
