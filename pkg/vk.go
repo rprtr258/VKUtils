@@ -130,7 +130,7 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 		if err != nil {
 			return
 		}
-		// log.Println("GOT: ", string(body), " ON ", method, " ", params)
+		// log.Println("ON ", method, " ", params, " GOT:\n", string(body))
 		// move out parsing response
 		type Errrr struct {
 			Err VkError `json:"error"`
@@ -164,13 +164,11 @@ func apiRequest(client *VKClient, method string, params url.Values) i.Result[[]b
 }
 
 type userListImpl struct {
-	client *VKClient
-	method string
-	count  uint
-	offset uint
-	total  f.Option[uint]
-	// TODO: remove duplication?
-	params    url.Values
+	client    *VKClient
+	method    string
+	count     uint
+	offset    uint
+	total     f.Option[uint]
 	urlParams url.Values
 
 	curPage s.Stream[UserInfo]
@@ -213,7 +211,6 @@ func (client *VKClient) getUserList(method string, params url.Values, pageSize u
 	return &userListImpl{
 		client:    client,
 		method:    method,
-		params:    params,
 		count:     pageSize,
 		offset:    0,
 		total:     f.None[uint](),
@@ -243,7 +240,7 @@ func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[UserInfo]
 		"owner_id": []string{fmt.Sprint(ownerID)},
 		"item_id":  []string{fmt.Sprint(postID)},
 		"skip_own": []string{"0"},
-		"fields":   []string{"first_name,last_name"},
+		"extended": []string{"1"},
 	}, getLikesListLimit)
 }
 

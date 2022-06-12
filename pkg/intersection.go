@@ -22,6 +22,7 @@ func intersectChans(chans s.Stream[s.Stream[UserInfo]]) UserSet {
 	return s.Reduce(first, f.Intersect[UserInfo], sets)
 }
 
+// PostID is pair of post author ID and post index.
 type PostID struct {
 	OwnerID UserID
 	PostID  uint
@@ -30,7 +31,7 @@ type PostID struct {
 type UserSets struct {
 	GroupMembers []UserID
 	Friends      []UserID
-	Followers    []UserID
+	Followers    []UserID // TODO: implement
 	Likers       []PostID
 	Sharers      []PostID // TODO: check inexactly
 	// TODO: user provided
@@ -50,9 +51,10 @@ func GetIntersection(client *VKClient, include UserSets) f.Set[UserInfo] {
 	for _, groupID := range include.GroupMembers {
 		userIDsStreams = append(userIDsStreams, client.getGroupMembers(groupID))
 	}
-	// groupSet   GroupMembers client.getGroupMembers(groupSet.GroupId)
+	for _, postID := range include.Likers {
+		userIDsStreams = append(userIDsStreams, client.getLikes(postID.OwnerID, postID.PostID))
+	}
 	// profileSet Followers    getFollowers(client, profileSet.UserId)
-	// postSet    Likers       client.getLikes(postSet.OwnerId, postSet.PostId)
 	// postSet    Sharers      getSharers(client, postSet.OwnerId, postSet.PostId).Unwrap()
 
 	// TODO: differentiate between empty map and empty intersection
