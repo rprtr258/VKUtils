@@ -24,7 +24,7 @@ func getPostsCount(client *VKClient, userID UserID) r.Result[uint] {
 			"offset":   []string{"0"},
 			"count":    []string{"1"},
 		})),
-		jsonUnmarshall[V],
+		jsonUnmarshal[V],
 	)
 	return r.Map(v, func(v V) uint {
 		return v.Response.Count
@@ -67,7 +67,7 @@ func GetReversedPosts(client *VKClient, groupURL string) r.Result[s.Stream[Post]
 		func(groupName string) r.Result[[]byte] {
 			return r.FromGoResult(client.apiRequestRaw("groups.getById", MakeUrlValues("group_id", groupName)))
 		},
-		jsonUnmarshall[V],
+		jsonUnmarshal[V],
 	)
 	groupIDR := r.Map(vR, func(v V) UserID { return UserID(-v.Response[0].ID) })
 	return r.FlatMap(
@@ -82,7 +82,7 @@ func GetReversedPosts(client *VKClient, groupURL string) r.Result[s.Stream[Post]
 						"count", fmt.Sprint(maxPostsCount),
 					)))
 				},
-				jsonUnmarshall[W],
+				jsonUnmarshal[W],
 				func(w W) r.Result[s.Stream[Post]] {
 					return r.Success(s.FromSlice(s.ReverseSlice(w.Response.Items)))
 				},

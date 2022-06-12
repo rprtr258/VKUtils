@@ -81,15 +81,14 @@ func (err *VkError) Error() string {
 	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
 }
 
-func jsonUnmarshall[J any](body []byte) i.Result[J] {
+func jsonUnmarshal[J any](body []byte) i.Result[J] {
 	return i.Eval(func() (J, error) {
-		var v J
-		err := json.Unmarshal(body, &v)
+		var j J
+		err := json.Unmarshal(body, &j)
 		if err != nil {
-			var j J
 			return j, fmt.Errorf("error while parsing '%s': %w", string(body), err)
 		}
-		return v, nil
+		return j, nil
 	})
 }
 
@@ -126,13 +125,15 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 			return
 		}
 		// log.Println("GOT: ", string(body), " ON ", method, " ", params)
-		var v struct {
+		// move out parsing response
+		type Errrr struct {
 			Err VkError `json:"error"`
 		}
-		err = json.Unmarshal(body, &v)
-		if err != nil {
-			return
+		errr := jsonUnmarshal[Errrr](body)
+		if errr.IsErr() {
+			return nil, errr.UnwrapErr()
 		}
+		v := errr.Unwrap()
 		if v.Err.Code != 0 {
 			// TODO: define behavior on error (retry or throw error) in loop
 			switch {
@@ -153,71 +154,67 @@ func (client *VKClient) apiRequestRaw(method string, params url.Values) (body []
 }
 
 func apiRequest(client *VKClient, method string, params url.Values) i.Result[[]byte] {
-	return i.Eval(func() ([]byte, error) {
-		return client.apiRequestRaw(method, params)
-	})
+	return i.FromGoResult(client.apiRequestRaw(method, params))
 }
 
 type userListImpl struct {
-	client    *VKClient
-	method    string
+	client *VKClient
+	method string
+	count  uint
+	offset uint
+	total  f.Option[uint]
+	// TODO: remove duplication?
 	params    url.Values
-	count     uint
-	offset    uint
-	total     f.Option[uint]
 	urlParams url.Values
 
 	curPage s.Stream[UserID]
 }
 
-func (xs *userListImpl) Next() f.Option[UserID] {
+func (xs *userListImpl) Next() (xxx f.Option[UserID]) {
 	if x := xs.curPage.Next(); x.IsSome() {
 		return x
 	}
 
-	// log.Println("GET USER LIST", xs.offset)
-	if /*xs.offset == 0*/ xs.total.IsNone() || xs.offset < xs.total.Unwrap() {
-		xs.urlParams.Set("offset", fmt.Sprint(xs.offset))
-		body := apiRequest(xs.client, xs.method, xs.urlParams)
-		userList := i.FlatMap(body, jsonUnmarshall[UserList])
-		onePageOfUsers := i.Map(
-			userList,
-			func(v UserList) f.Pair[uint, s.Stream[UserID]] {
-				return f.NewPair(
-					v.Response.Count,
-					s.FromSlice(v.Response.Items),
-				)
-			},
-		)
-		return i.Fold(
-			onePageOfUsers,
-			func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) f.Option[UserID] {
-				xs.offset += xs.count
-				xs.total, xs.curPage = f.Some(totalAndFirstBatch.Left), totalAndFirstBatch.Right
-				return xs.curPage.Next()
-			},
-			func(err error) f.Option[UserID] {
-				log.Println("ERROR WHILE GETTING PAGE: ", err)
-				return f.None[UserID]()
-			},
-		)
+	if xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
+		return f.None[UserID]()
 	}
-	return f.None[UserID]()
+	// log.Println("GET USER LIST", xs.offset, xs.total)
+	xs.urlParams.Set("offset", fmt.Sprint(xs.offset))
+	body := apiRequest(xs.client, xs.method, xs.urlParams)
+	userList := i.FlatMap(body, jsonUnmarshal[UserList])
+	onePageOfUsers := i.Map(
+		userList,
+		func(v UserList) f.Pair[uint, s.Stream[UserID]] {
+			return f.NewPair(v.Response.Count, s.FromSlice(v.Response.Items))
+		},
+	)
+	return i.Fold(
+		onePageOfUsers,
+		func(totalAndFirstBatch f.Pair[uint, s.Stream[UserID]]) f.Option[UserID] {
+			xs.offset += xs.count
+			xs.total, xs.curPage = f.Some(totalAndFirstBatch.Left), totalAndFirstBatch.Right
+			return xs.curPage.Next()
+		},
+		func(err error) f.Option[UserID] {
+			log.Println("ERROR WHILE GETTING PAGE: ", err)
+			return f.None[UserID]()
+		},
+	)
 }
 
 // TODO: merge method and count in one structure
-func (client *VKClient) getUserList(method string, params url.Values, count uint) s.Stream[UserID] {
-	countString := fmt.Sprint(count)
+func (client *VKClient) getUserList(method string, params url.Values, pageSize uint) s.Stream[UserID] {
+	pageSizeStr := fmt.Sprint(pageSize)
 	urlParams := make(url.Values)
 	for k, v := range params {
 		urlParams[k] = v
 	}
-	urlParams.Set("count", countString)
+	urlParams.Set("count", pageSizeStr)
 	return &userListImpl{
 		client:    client,
 		method:    method,
 		params:    params,
-		count:     count,
+		count:     pageSize,
 		offset:    0,
 		total:     f.None[uint](),
 		urlParams: urlParams,
@@ -229,12 +226,14 @@ func (client *VKClient) getUserList(method string, params url.Values, count uint
 func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[UserID] {
 	return client.getUserList("groups.getMembers", url.Values{
 		"group_id": []string{fmt.Sprint(-groupID)},
+		// "fields":   []string{"first_name,last_name"},
 	}, groupsGetMembersLimit)
 }
 
 func (client *VKClient) getFriends(userID UserID) s.Stream[UserID] {
 	return client.getUserList("friends.get", url.Values{
 		"user_id": []string{fmt.Sprint(userID)},
+		// "fields":  []string{"first_name,last_name"},
 	}, getFriendsLimit)
 }
 
@@ -244,6 +243,7 @@ func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[UserID] {
 		"owner_id": []string{fmt.Sprint(ownerID)},
 		"item_id":  []string{fmt.Sprint(postID)},
 		"skip_own": []string{"0"},
+		// "fields":   []string{"first_name,last_name"},
 	}, getLikesListLimit)
 }
 
@@ -268,7 +268,7 @@ func (client *VKClient) getPostTime(ownerID UserID, postID uint) i.Result[uint] 
 			} `json:"reposts"`
 		} `json:"response"`
 	}
-	userList := i.FlatMap(body, jsonUnmarshall[V])
+	userList := i.FlatMap(body, jsonUnmarshal[V])
 	return i.FlatMap(
 		userList,
 		func(v V) i.Result[uint] {

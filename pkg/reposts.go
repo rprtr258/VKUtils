@@ -63,7 +63,7 @@ func (xs *findRepostImplImpl) Next() f.Option[WallPost] {
 		"offset":   []string{fmt.Sprint(xs.offset)},
 		"count":    []string{xs.countString},
 	})
-	onePageOfPosts := r.FlatMap(body, jsonUnmarshall[WallPosts])
+	onePageOfPosts := r.FlatMap(body, jsonUnmarshal[WallPosts])
 	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
 	// 	errMsg := err.Error()
 	// 	// TODO: change to error structs?
