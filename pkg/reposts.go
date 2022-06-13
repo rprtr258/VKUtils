@@ -30,22 +30,22 @@ func (pager *findRepostPager) NextPage() r.Result[f.Option[[]Post]] {
 	if pager.total.IsSome() && pager.offset >= pager.total.Unwrap() {
 		return r.Success(f.None[[]Post]())
 	}
-	// log.Println("GET USER LIST", xs.offset, xs.total)
-	wallPosts := pager.client.getWallPosts(pager.params, "offset", fmt.Sprint(pager.offset))
-	wallPosts = r.TryRecover(wallPosts, func(err error) r.Result[WallPosts] {
-		// TODO: change to error structs
-		if errMsg, ok := err.(ApiCallError); ok {
-			switch errMsg.vkError.Code {
-			case accessDenied, userWasDeletedOrBanned, profileIsPrivate:
-				return r.Success(WallPosts{Response: wallPostsResponse{
-					Count: 0,
-					Items: []Post{},
-				}})
+	wallPosts := r.TryRecover(
+		pager.client.getWallPosts(pager.params, "offset", fmt.Sprint(pager.offset)),
+		func(err error) r.Result[WallPosts] {
+			if errMsg, ok := err.(ApiCallError); ok {
+				switch errMsg.vkError.Code {
+				case accessDenied, userWasDeletedOrBanned, profileIsPrivate:
+					return r.Success(WallPosts{Response: wallPostsResponse{
+						Count: 0,
+						Items: []Post{},
+					}})
+				}
 			}
-		}
-		log.Printf("Error getting user posts: %T(%[1]v)\n", err)
-		return r.Err[WallPosts](err)
-	})
+			log.Printf("Error getting user posts: %T(%[1]v)\n", err)
+			return r.Err[WallPosts](err)
+		},
+	)
 	return r.Map(
 		wallPosts,
 		func(page WallPosts) f.Option[[]Post] {
