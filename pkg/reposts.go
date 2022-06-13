@@ -28,7 +28,7 @@ func (xs *repostPagesImpl) Next() f.Option[[]Post] {
 	if xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
 		return f.None[[]Post]()
 	}
-	onePageOfPosts := xs.client.getWallPosts(xs.offset, xs.pageSize, xs.ownerID)
+	pageResult := xs.client.getWallPosts(xs.offset, xs.pageSize, xs.ownerID)
 	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
 	// 	errMsg := err.Error()
 	// 	// TODO: change to error structs
@@ -40,15 +40,14 @@ func (xs *repostPagesImpl) Next() f.Option[[]Post] {
 	// 	return Fail[Repost](err)
 	// })
 	return r.Fold(
-		onePageOfPosts,
-		func(totalAndFirstBatch WallPosts) f.Option[[]Post] {
-			var curPage []Post
-			xs.total, curPage = f.Some(totalAndFirstBatch.Response.Count), totalAndFirstBatch.Response.Items
+		pageResult,
+		func(page Page[Post]) f.Option[[]Post] {
 			// if xs.offset == 0 {
 			// 	log.Printf("CHECKING USER %d WITH %d POSTS\n", xs.ownerID, totalAndFirstBatch.Response.Count)
 			// }
+			xs.total = f.Some(page.Total())
 			xs.offset += uint(xs.pageSize)
-			return f.Some(curPage)
+			return f.Some(page.Items())
 		},
 		func(err error) f.Option[[]Post] {
 			log.Println("ERROR WHILE GETTING PAGE: ", err)

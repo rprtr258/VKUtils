@@ -40,6 +40,11 @@ const (
 // UserID is id of some user or group.
 type UserID int
 
+type Page[A any] interface {
+	Total() uint
+	Items() []A
+}
+
 type User struct {
 	ID         UserID `json:"id"`
 	FirstName  string `json:"first_name"`
@@ -52,6 +57,14 @@ type UserList struct {
 		Count uint   `json:"count"`
 		Items []User `json:"items"`
 	} `json:"response"`
+}
+
+func (posts *UserList) Total() uint {
+	return posts.Response.Count
+}
+
+func (posts *UserList) Items() []User {
+	return posts.Response.Items
 }
 
 // Post is post on some user or group wall.
@@ -73,6 +86,14 @@ type WallPosts struct {
 		Count uint   `json:"count"`
 		Items []Post `json:"items"`
 	} `json:"response"`
+}
+
+func (posts *WallPosts) Total() uint {
+	return posts.Response.Count
+}
+
+func (posts *WallPosts) Items() []Post {
+	return posts.Response.Items
 }
 
 // VKClient is a client to VK api.
@@ -120,7 +141,10 @@ func jsonUnmarshal[J any](body []byte) r.Result[J] {
 }
 
 // TODO: print request, response, timing
-func (client *VKClient) apiRequest(method string, params url.Values) r.Result[[]byte] {
+func (client *VKClient) apiRequest(method string, params url.Values, params2 ...string) r.Result[[]byte] {
+	for i := 0; i < len(params2); i += 2 {
+		params.Set(params2[i], params2[i+1])
+	}
 	url := fmt.Sprintf("https://api.vk.com/method/%s", method)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -178,35 +202,41 @@ func (client *VKClient) apiRequest(method string, params url.Values) r.Result[[]
 	return r.Err[[]byte](fmt.Errorf("%s(%v) = Timeout", method, params))
 }
 
-type userPagesImpl struct {
-	client    *VKClient
-	method    string
-	pageSize  PageSize
-	offset    uint
-	total     f.Option[uint]
-	urlParams url.Values
+type pagedImpl[A any] struct {
+	client   *VKClient
+	pageSize PageSize
+	offset   uint
+	total    f.Option[uint]
+	getPage  func(uint) r.Result[Page[A]]
 }
 
-func (xs *userPagesImpl) Next() f.Option[[]User] {
+func (xs *pagedImpl[A]) Next() f.Option[[]A] {
 	if xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
-		return f.None[[]User]()
+		return f.None[[]A]()
 	}
-	// log.Println("GET USER LIST", xs.offset, xs.total)
-	xs.urlParams.Set("offset", fmt.Sprint(xs.offset))
-	body := xs.client.apiRequest(xs.method, xs.urlParams)
-	onePageOfUsers := r.FlatMap(body, jsonUnmarshal[UserList])
+	pageResult := xs.getPage(xs.offset)
 	return r.Fold(
-		onePageOfUsers,
-		func(batch UserList) f.Option[[]User] {
+		pageResult,
+		func(page Page[A]) f.Option[[]A] {
+			xs.total = f.Some(page.Total())
 			xs.offset += uint(xs.pageSize)
-			xs.total = f.Some(batch.Response.Count)
-			return f.Some(batch.Response.Items)
+			return f.Some(page.Items())
 		},
-		func(err error) f.Option[[]User] {
+		func(err error) f.Option[[]A] {
 			log.Println("ERROR WHILE GETTING PAGE: ", err)
-			return f.None[[]User]()
+			return f.None[[]A]()
 		},
 	)
+}
+
+func getPaged[A any](client *VKClient, pageSize PageSize, getPage func(uint) r.Result[Page[A]]) s.Stream[A] {
+	return s.Paged[A](&pagedImpl[A]{
+		client:   client,
+		pageSize: pageSize,
+		offset:   0,
+		total:    f.None[uint](),
+		getPage:  getPage,
+	})
 }
 
 func (client *VKClient) getUserList(method string, params url.Values, pageSize PageSize) s.Stream[User] {
@@ -216,13 +246,15 @@ func (client *VKClient) getUserList(method string, params url.Values, pageSize P
 		urlParams[k] = v
 	}
 	urlParams.Set("count", pageSizeStr)
-	return s.Paged[User](&userPagesImpl{
-		client:    client,
-		method:    method,
-		pageSize:  pageSize,
-		offset:    0,
-		total:     f.None[uint](),
-		urlParams: urlParams,
+	return getPaged(client, pageSize, func(offset uint) r.Result[Page[User]] {
+		// log.Println("GET USER LIST", xs.offset, xs.total)
+		userList := r.FlatMap(client.apiRequest(method, urlParams, "offset", fmt.Sprint(offset)), jsonUnmarshal[UserList])
+		return r.Map(
+			userList,
+			func(x UserList) Page[User] {
+				return Page[User](&x)
+			},
+		)
 	})
 }
 
@@ -257,13 +289,19 @@ func (client *VKClient) getFollowers(userId UserID) s.Stream[User] {
 	), 1000)
 }
 
-func (client *VKClient) getWallPosts(offset uint, pageSize PageSize, ownerID UserID) r.Result[WallPosts] {
+func (client *VKClient) getWallPosts(offset uint, pageSize PageSize, ownerID UserID) r.Result[Page[Post]] {
 	body := client.apiRequest("wall.get", url.Values{
 		"owner_id": []string{fmt.Sprint(ownerID)},
 		"offset":   []string{fmt.Sprint(offset)},
 		"count":    []string{fmt.Sprint(pageSize)}, // TODO: is it in need to be provided?
 	})
-	return r.FlatMap(body, jsonUnmarshal[WallPosts])
+	wallPosts := r.FlatMap(body, jsonUnmarshal[WallPosts])
+	return r.Map(
+		wallPosts,
+		func(x WallPosts) Page[Post] {
+			return Page[Post](&x)
+		},
+	)
 }
 
 func (client *VKClient) getPostTime(ownerID UserID, postID uint) r.Result[uint] {
