@@ -146,10 +146,11 @@ func main() {
 	rootCmd.AddCommand(&revPostsUrl)
 
 	var (
-		groups     []string
-		postLikers []string
-		friends    []string
-		followers  []string
+		groups         []string
+		postLikers     []string
+		friends        []string
+		followers      []string
+		postCommenters []string
 	)
 	countCmd := cobra.Command{
 		Use:   "count",
@@ -175,7 +176,12 @@ func main() {
 
 			postLikerIDs := parsePostsList(postLikers)
 			if postLikerIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing post likers ids: %v", postLikerIDs.UnwrapErr()))
+				errors = append(errors, fmt.Sprintf("error parsing post ids for likers: %v", postLikerIDs.UnwrapErr()))
+			}
+
+			postCommenterIDs := parsePostsList(postCommenters)
+			if postCommenterIDs.IsErr() {
+				errors = append(errors, fmt.Sprintf("error parsing post ids for commenters: %v", postCommenterIDs.UnwrapErr()))
 			}
 
 			if errors != nil {
@@ -187,6 +193,7 @@ func main() {
 				Friends:      friendIDs.Unwrap(),
 				Followers:    followerIDs.Unwrap(),
 				Likers:       postLikerIDs.Unwrap(),
+				Commenters:   postCommenterIDs.Unwrap(),
 			}) {
 				fmt.Printf("%d: %s %s - %d\n", userInfoCount.Left.ID, userInfoCount.Left.FirstName, userInfoCount.Left.SecondName, userInfoCount.Right)
 			}
@@ -195,9 +202,10 @@ func main() {
 		Example: "vkutils count --friends 168715495 --groups -187839235 --post-likers 107904132_1371",
 	}
 	countCmd.Flags().StringSliceVarP(&groups, "groups", "g", []string{}, "group ids members of which to ")
-	countCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
 	countCmd.Flags().StringSliceVarP(&friends, "friends", "r", []string{}, "group ids members of which to ")
 	countCmd.Flags().StringSliceVarP(&followers, "followers", "w", []string{}, "group ids members of which to ")
+	countCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
+	countCmd.Flags().StringSliceVarP(&postCommenters, "commenters", "c", []string{}, "group ids members of which to ")
 	rootCmd.AddCommand(&countCmd)
 
 	start := time.Now()

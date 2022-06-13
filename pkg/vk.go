@@ -17,9 +17,11 @@ import (
 // vk api constants
 const (
 	// getUserListThreads     = 10
-	groupsGetMembersLimit = 1000
-	getFriendsLimit       = 5000
-	getLikesListLimit     = 1000
+	groupsGetMembersPageSize  = PageSize(1000)
+	getFriendsPageSize        = PageSize(5000)
+	wallGetCommentsPageSize   = PageSize(100)
+	getLikesPageSize          = PageSize(1000)
+	usersGetFollowersPageSize = PageSize(1000)
 )
 
 // vk api error codes
@@ -88,6 +90,29 @@ type WallGetByIDResponse struct {
 type GroupsGetByIDResponse struct {
 	Response []struct {
 		ID int `json:"id"`
+	} `json:"response"`
+}
+
+type GetCommentsResponse struct {
+	Response struct {
+		Count uint `json:"count"`
+		Items []struct {
+			ID       uint   `json:"id"`
+			AuthorID UserID `json:"from_id"`
+			Thread   struct {
+				Count uint `json:"count"`
+			} `json:"thread"`
+		} `json:"items"`
+		Profiles []struct {
+			ID        UserID `json:"id"`
+			FirstName string `json:"first_name"`
+			LastName  string `json:"last_name"`
+		} `json:"profiles"`
+		Groups []struct {
+			// unsigned because api authors decided it would be funny
+			ID   uint   `json:"id"`
+			Name string `json:"name"`
+		} `json:"groups"`
 	} `json:"response"`
 }
 
@@ -275,14 +300,14 @@ func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[User] {
 	return client.getUserList("groups.getMembers", MakeUrlValues(map[string]any{
 		"group_id": -groupID,
 		"fields":   "first_name,last_name",
-	}), groupsGetMembersLimit)
+	}), groupsGetMembersPageSize)
 }
 
 func (client *VKClient) getFriends(userID UserID) s.Stream[User] {
 	return client.getUserList("friends.get", MakeUrlValues(map[string]any{
 		"user_id": userID,
 		"fields":  "first_name,last_name",
-	}), getFriendsLimit)
+	}), getFriendsPageSize)
 }
 
 func (client *VKClient) getLikes(postID PostID) s.Stream[User] {
@@ -292,14 +317,94 @@ func (client *VKClient) getLikes(postID PostID) s.Stream[User] {
 		"item_id":  postID.ID,
 		"skip_own": "0",
 		"extended": "1",
-	}), getLikesListLimit)
+	}), getLikesPageSize)
 }
 
 func (client *VKClient) getFollowers(userId UserID) s.Stream[User] {
 	return client.getUserList("users.getFollowers", MakeUrlValues(map[string]any{
 		"user_id": userId,
 		"fields":  "first_name,last_name",
-	}), 1000)
+	}), usersGetFollowersPageSize)
+}
+
+func (client *VKClient) GetComments(postID PostID) s.Stream[User] {
+	groupNames := map[UserID]string{}
+	userNames := map[UserID]f.Pair[string, string]{}
+	res := f.NewSet[UserID]()
+	total := f.None[uint]()
+	totalSeen := uint(0)
+	offset := uint(0)
+	params := MakeUrlValues(map[string]any{
+		"owner_id": postID.OwnerID,
+		"post_id":  postID.ID,
+		"extended": 1,
+		"fields":   "first_name,last_name,name",
+		"count":    wallGetCommentsPageSize,
+	})
+	commentsThreadsToCheck := make([]f.Pair[uint, uint], 0)
+	for total.IsNone() || offset < total.Unwrap() {
+		kk := client.apiRequest("wall.getComments", params, "offset", fmt.Sprint(offset))
+		k := r.FlatMap(kk, jsonUnmarshal[GetCommentsResponse])
+		if k.IsErr() {
+			log.Println(k.UnwrapErr())
+			break
+		}
+		k0 := k.Unwrap()
+		total = f.Some(k0.Response.Count)
+		totalSeen += uint(len(k0.Response.Items))
+		offset += uint(wallGetCommentsPageSize)
+		for _, item := range k0.Response.Items {
+			res.Add(item.AuthorID)
+			if item.Thread.Count > 0 {
+				commentsThreadsToCheck = append(commentsThreadsToCheck, f.NewPair(item.ID, item.Thread.Count))
+			}
+		}
+		for _, profile := range k0.Response.Profiles {
+			userNames[profile.ID] = f.NewPair(profile.FirstName, profile.LastName)
+		}
+		for _, group := range k0.Response.Groups {
+			groupNames[-UserID(group.ID)] = group.Name
+		}
+	}
+	for _, commentIDAndThreadSize := range commentsThreadsToCheck {
+		for offset := uint(0); offset < commentIDAndThreadSize.Right; offset++ {
+			kk := client.apiRequest("wall.getComments", params, "comment_id", fmt.Sprint(commentIDAndThreadSize.Left), "offset", fmt.Sprint(offset))
+			k := r.FlatMap(kk, jsonUnmarshal[GetCommentsResponse])
+			if k.IsErr() {
+				log.Println(k.UnwrapErr())
+				break
+			}
+			k0 := k.Unwrap()
+			for _, item := range k0.Response.Items {
+				res.Add(item.AuthorID)
+			}
+			for _, profile := range k0.Response.Profiles {
+				userNames[profile.ID] = f.NewPair(profile.FirstName, profile.LastName)
+			}
+			for _, group := range k0.Response.Groups {
+				groupNames[-UserID(group.ID)] = group.Name
+			}
+		}
+	}
+	return s.Map(
+		s.FromSet(res),
+		func(userID UserID) User {
+			if userID < 0 {
+				return User{
+					ID:         userID,
+					FirstName:  groupNames[userID],
+					SecondName: "_GROUP",
+				}
+			}
+			userName := userNames[userID]
+			return User{
+				ID:         userID,
+				FirstName:  userName.Left,
+				SecondName: userName.Right,
+			}
+		},
+	)
+
 }
 
 func (client *VKClient) getWallPosts(params url.Values, params2 ...string) r.Result[WallPosts] {

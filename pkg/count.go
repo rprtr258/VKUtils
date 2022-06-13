@@ -13,8 +13,8 @@ type UserSets struct {
 	Friends      []UserID
 	Followers    []UserID
 	Likers       []PostID
+	Commenters   []PostID
 	// TODO: user provided
-	// TODO: commenters
 }
 
 func MembershipCount(client *VKClient, include UserSets) []f.Pair[User, int] {
@@ -24,6 +24,7 @@ func MembershipCount(client *VKClient, include UserSets) []f.Pair[User, int] {
 		s.Map(s.FromSlice(include.GroupMembers), client.getGroupMembers),
 		s.Map(s.FromSlice(include.Followers), client.getFollowers),
 		s.Map(s.FromSlice(include.Likers), func(postID PostID) s.Stream[User] { return client.getLikes(postID) }),
+		s.Map(s.FromSlice(include.Commenters), func(postID PostID) s.Stream[User] { return client.GetComments(postID) }),
 	)
 	mp := s.Reduce(f.NewEmptyCounter[User](), f.CounterPlus[User], s.Map(chans, s.CollectCounter[User]))
 	res := slice.FromMap(mp)
