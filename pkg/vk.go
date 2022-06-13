@@ -216,7 +216,6 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 		}
 		v := errr.Unwrap()
 		if v.Err.Code != 0 {
-			// TODO: define behavior on error (retry or throw error) in loop
 			switch {
 			case v.Err.Code == tooManyRequests:
 				log.Printf("Too many requests on %s(%v)\n", method, params)
