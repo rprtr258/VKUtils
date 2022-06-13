@@ -75,6 +75,18 @@ type WallPosts struct {
 	} `json:"response"`
 }
 
+type WallGetByIDResponse struct {
+	Response []struct {
+		Date uint `json:"date"`
+	} `json:"response"`
+}
+
+type GroupsGetByIDResponse struct {
+	Response []struct {
+		ID int `json:"id"`
+	} `json:"response"`
+}
+
 // VKClient is a client to VK api.
 type VKClient struct {
 	accessToken string
@@ -90,14 +102,6 @@ func (p postHiddenError) Error() string {
 	return fmt.Sprintf("Post %d_%d is hidden", p.ownerID, p.postID)
 }
 
-// NewVKClient creates new VKClient.
-func NewVKClient(accessToken string) VKClient {
-	return VKClient{
-		accessToken: accessToken,
-		client:      *http.DefaultClient,
-	}
-}
-
 // VkError is vk api error.
 type VkError struct {
 	Code    uint   `json:"error_code"`
@@ -109,6 +113,14 @@ type VkErrorResponse struct {
 
 func (err *VkError) Error() string {
 	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
+}
+
+// NewVKClient creates new VKClient.
+func NewVKClient(accessToken string) VKClient {
+	return VKClient{
+		accessToken: accessToken,
+		client:      *http.DefaultClient,
+	}
 }
 
 func jsonUnmarshal[J any](body []byte) r.Result[J] {
@@ -144,7 +156,7 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 	for timeLimitTries < apiRequestRetries {
 		resp, err = client.client.Do(req)
 		if err != nil {
-			// if user hid their wall
+			// TODO: if user hid their wall
 			// TODO: fix, not working
 			return r.Err[[]byte](err)
 		}
@@ -216,7 +228,10 @@ func (pager *userListPager) NextPage() r.Result[f.Option[[]User]] {
 		return r.Success(f.None[[]User]())
 	}
 	// log.Println("GET USER LIST", xs.offset, xs.total)
-	userList := r.FlatMap(pager.client.apiRequest(pager.method, pager.urlParams, "offset", fmt.Sprint(pager.offset)), jsonUnmarshal[UserList])
+	userList := r.FlatMap(
+		pager.client.apiRequest(pager.method, pager.urlParams, "offset", fmt.Sprint(pager.offset)),
+		jsonUnmarshal[UserList],
+	)
 	return r.Map(
 		userList,
 		func(ul UserList) f.Option[[]User] {
@@ -280,15 +295,10 @@ func (client *VKClient) getPostTime(ownerID UserID, postID uint) r.Result[uint] 
 	body := client.apiRequest("wall.getById", MakeUrlValues(map[string]any{
 		"posts": fmt.Sprintf("%d_%d", ownerID, postID),
 	}))
-	type V struct {
-		Response []struct {
-			Date uint `json:"date"`
-		} `json:"response"`
-	}
-	userList := r.FlatMap(body, jsonUnmarshal[V])
+	userList := r.FlatMap(body, jsonUnmarshal[WallGetByIDResponse])
 	return r.FlatMap(
 		userList,
-		func(v V) r.Result[uint] {
+		func(v WallGetByIDResponse) r.Result[uint] {
 			if len(v.Response) != 1 {
 				return r.Err[uint](postHiddenError{ownerID, postID})
 			}
@@ -298,19 +308,13 @@ func (client *VKClient) getPostTime(ownerID UserID, postID uint) r.Result[uint] 
 }
 
 func (client *VKClient) getGroupID(groupName string) r.Result[UserID] {
-	type V struct {
-		Response []struct {
-			ID int `json:"id"`
-		} `json:"response"`
-	}
-
 	vR := r.FlatMap(
 		client.apiRequest("groups.getById", MakeUrlValues(map[string]any{
 			"group_id": groupName,
 		})),
-		jsonUnmarshal[V],
+		jsonUnmarshal[GroupsGetByIDResponse],
 	)
-	return r.Map(vR, func(v V) UserID { return UserID(-v.Response[0].ID) })
+	return r.Map(vR, func(v GroupsGetByIDResponse) UserID { return UserID(-v.Response[0].ID) })
 }
 
 func MakeUrlValues(kvs map[string]any) url.Values {
