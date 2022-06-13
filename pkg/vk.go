@@ -307,7 +307,7 @@ func (client *VKClient) getWallPosts(params url.Values, params2 ...string) r.Res
 	return r.FlatMap(body, jsonUnmarshal[WallPosts])
 }
 
-// TODO: return time.Time
+// getPostTime returns post creation time as Unix uint.
 func (client *VKClient) getPostTime(postID PostID) r.Result[uint] {
 	body := client.apiRequest("wall.getById", MakeUrlValues(map[string]any{
 		"posts": fmt.Sprintf("%d_%d", postID.OwnerID, postID.ID),
