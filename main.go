@@ -164,12 +164,12 @@ func newCountCmd(client *vk.VKClient) *cobra.Command {
 		},
 		Example: "vkutils count --friends 168715495 --groups -187839235 --post-likers 107904132_1371",
 	}
-	countCmd.Flags().StringSliceVarP(&groups, "groups", "g", []string{}, "group ids members of which to ")
-	countCmd.Flags().StringSliceVarP(&friends, "friends", "r", []string{}, "group ids members of which to ")
-	countCmd.Flags().StringSliceVarP(&followers, "followers", "w", []string{}, "group ids members of which to ")
-	countCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
-	countCmd.Flags().StringSliceVarP(&postCommenters, "commenters", "c", []string{}, "group ids members of which to ")
-	countCmd.Flags().StringSliceVarP(&userProvided, "users", "u", []string{}, "group ids members of which to ")
+	countCmd.Flags().StringSliceVarP(&groups, "groups", "g", []string{}, "group id members of which to scan")
+	countCmd.Flags().StringSliceVarP(&friends, "friends", "r", []string{}, "user id friends of which to scan")
+	countCmd.Flags().StringSliceVarP(&followers, "followers", "w", []string{}, "user id followers of which to scan")
+	countCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "post id likers of which to scan")
+	countCmd.Flags().StringSliceVarP(&postCommenters, "commenters", "c", []string{}, "post id commenters of which to scan")
+	countCmd.Flags().StringSliceVarP(&userProvided, "users", "u", []string{}, "user ids to scan")
 	return &countCmd
 }
 
