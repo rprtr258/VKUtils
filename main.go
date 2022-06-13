@@ -17,36 +17,6 @@ import (
 	vk "github.com/rprtr258/vk-utils/pkg"
 )
 
-func parseUserIDsList(ls []string) r.Result[[]vk.UserID] {
-	res := make([]vk.UserID, 0, len(ls))
-	for _, id := range ls {
-		userID, err := strconv.ParseInt(id, 10, 32)
-		if err != nil {
-			return r.Err[[]vk.UserID](err)
-		}
-		res = append(res, vk.UserID(userID))
-	}
-	return r.Success(res)
-}
-
-func parsePostsList(ls []string) r.Result[[]vk.PostID] {
-	res := make([]vk.PostID, 0, len(ls))
-	for _, id := range ls {
-		var (
-			ownerID vk.UserID
-			postID  uint
-		)
-		if _, err := fmt.Sscanf(id, "%d_%d", &ownerID, &postID); err != nil {
-			return r.Err[[]vk.PostID](err)
-		}
-		res = append(res, vk.PostID{
-			OwnerID: ownerID,
-			ID:      postID,
-		})
-	}
-	return r.Success(res)
-}
-
 func parsePostURL(url string) r.Result[vk.PostID] {
 	var (
 		ownerID vk.UserID
@@ -100,6 +70,42 @@ func newRepostCommand(client *vk.VKClient) *cobra.Command {
 	return &repostsCmd
 }
 
+func parseUserIDsList(ls []string) r.Result[[]vk.UserID] {
+	res := make([]vk.UserID, 0, len(ls))
+	for _, id := range ls {
+		userID, err := strconv.ParseInt(id, 10, 32)
+		if err != nil {
+			return r.Err[[]vk.UserID](fmt.Errorf("error parsing user id: %s", id))
+		}
+		res = append(res, vk.UserID(userID))
+	}
+	return r.Success(res)
+}
+
+func parsePostsList(ls []string) r.Result[[]vk.PostID] {
+	res := make([]vk.PostID, 0, len(ls))
+	for _, id := range ls {
+		var (
+			ownerID vk.UserID
+			postID  uint
+		)
+		if _, err := fmt.Sscanf(id, "%d_%d", &ownerID, &postID); err != nil {
+			return r.Err[[]vk.PostID](fmt.Errorf("error parsing post id: %s", id))
+		}
+		res = append(res, vk.PostID{
+			OwnerID: ownerID,
+			ID:      postID,
+		})
+	}
+	return r.Success(res)
+}
+
+func appendIfError[A any](errors *[]error, x r.Result[A]) {
+	if x.IsErr() {
+		*errors = append(*errors, x.UnwrapErr())
+	}
+}
+
 func newCountCmd(client *vk.VKClient) *cobra.Command {
 	var (
 		groups         []string
@@ -114,40 +120,23 @@ func newCountCmd(client *vk.VKClient) *cobra.Command {
 		Short: "Counts how many sets users belong to. Useful for uniting and intersecting user sets.",
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var errors []string
+			var errors []error
 
 			groupIDs := parseUserIDsList(groups)
-			if groupIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing group ids: %v", groupIDs.UnwrapErr()))
-			}
-
+			appendIfError(&errors, groupIDs)
 			friendIDs := parseUserIDsList(friends)
-			if friendIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing friend ids: %v", friendIDs.UnwrapErr()))
-			}
-
+			appendIfError(&errors, friendIDs)
 			followerIDs := parseUserIDsList(followers)
-			if followerIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing follower ids: %v", followerIDs.UnwrapErr()))
-			}
-
+			appendIfError(&errors, followerIDs)
 			userIDs := parseUserIDsList(userProvided)
-			if userIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing follower ids: %v", userIDs.UnwrapErr()))
-			}
-
+			appendIfError(&errors, userIDs)
 			postLikerIDs := parsePostsList(postLikers)
-			if postLikerIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing post ids for likers: %v", postLikerIDs.UnwrapErr()))
-			}
-
+			appendIfError(&errors, postLikerIDs)
 			postCommenterIDs := parsePostsList(postCommenters)
-			if postCommenterIDs.IsErr() {
-				errors = append(errors, fmt.Sprintf("error parsing post ids for commenters: %v", postCommenterIDs.UnwrapErr()))
-			}
+			appendIfError(&errors, postCommenterIDs)
 
 			if errors != nil {
-				return fmt.Errorf(strings.Join(errors, "\n"))
+				return fmt.Errorf(strings.Join(s.CollectToSlice(s.Map(s.FromSlice(errors), (error).Error)), "\n"))
 			}
 
 			for _, userInfoCount := range vk.MembershipCount(client, vk.UserSets{
