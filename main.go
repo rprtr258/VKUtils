@@ -66,20 +66,7 @@ func parseGroupURL(groupURL string) r.Result[string] {
 	return r.Success(groupName)
 }
 
-func main() {
-	var client vk.VKClient
-	rootCmd := cobra.Command{
-		Use:   "vkutils",
-		Short: "VK data extraction tools. Need VK_ACCESS_TOKEN env var to work with VK api.",
-		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
-			if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
-				return errors.New("VK_ACCESS_TOKEN was not found in env vars")
-			}
-			client = vk.NewVKClient(os.Getenv("VK_ACCESS_TOKEN"))
-			return nil
-		},
-	}
-
+func newRepostCommand(client *vk.VKClient) *cobra.Command {
 	var postURL string
 	repostsCmd := cobra.Command{
 		Use:   "reposts -u",
@@ -90,7 +77,7 @@ func main() {
 			sharersStream := r.FlatMap(
 				parsePostURL(postURL),
 				func(postID vk.PostID) r.Result[s.Stream[vk.PostID]] {
-					return vk.GetReposters(&client, postID)
+					return vk.GetReposters(client, postID)
 				},
 			)
 			return r.Fold(
@@ -110,44 +97,10 @@ func main() {
 		Example: "vkutils reposts -u https://vk.com/wall-2158488_651604",
 	}
 	repostsCmd.Flags().StringVarP(&postURL, "url", "u", "", "url of vk post")
-	rootCmd.AddCommand(&repostsCmd)
+	return &repostsCmd
+}
 
-	// TODO: dump groups/profiles posts into database (own format?)
-	var groupURL string
-	revPostsUrl := cobra.Command{
-		Use:   "dumpwall",
-		Short: "List group posts in reversed order (from old to new).",
-		Args:  cobra.MaximumNArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			groupName := parseGroupURL(groupURL)
-			r.FoldConsume(
-				vk.GetPosts(&client, groupName.Unwrap()),
-				func(x s.Stream[vk.Post]) {
-					s.ForEach(
-						x,
-						func(p vk.Post) {
-							fmt.Printf("https://vk.com/wall%d_%d\n", p.Owner, p.ID)
-							fmt.Println("Date: ", time.Unix(int64(p.Date), 0))
-							fmt.Println(p.Text)
-							if len(p.CopyHistory) > 0 {
-								fmt.Println("Repost: ", p.CopyHistory[0])
-							}
-							fmt.Println()
-						},
-					)
-				},
-				func(err error) {
-					fmt.Printf("error: %v\n", err)
-				},
-			)
-			return nil
-		},
-		Example: "vkutils revposts https://vk.com/abobus_official",
-	}
-	revPostsUrl.Flags().StringVarP(&groupURL, "url", "u", "", "url of vk group")
-	revPostsUrl.MarkFlagRequired("url")
-	rootCmd.AddCommand(&revPostsUrl)
-
+func newCountCmd(client *vk.VKClient) *cobra.Command {
 	var (
 		groups         []string
 		postLikers     []string
@@ -197,7 +150,7 @@ func main() {
 				return fmt.Errorf(strings.Join(errors, "\n"))
 			}
 
-			for _, userInfoCount := range vk.MembershipCount(&client, vk.UserSets{
+			for _, userInfoCount := range vk.MembershipCount(client, vk.UserSets{
 				GroupMembers: groupIDs.Unwrap(),
 				Friends:      friendIDs.Unwrap(),
 				Followers:    followerIDs.Unwrap(),
@@ -217,7 +170,64 @@ func main() {
 	countCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
 	countCmd.Flags().StringSliceVarP(&postCommenters, "commenters", "c", []string{}, "group ids members of which to ")
 	countCmd.Flags().StringSliceVarP(&userProvided, "users", "u", []string{}, "group ids members of which to ")
-	rootCmd.AddCommand(&countCmd)
+	return &countCmd
+}
+
+func newDumpCommand(client *vk.VKClient) *cobra.Command {
+	// TODO: dump groups/profiles posts into database (own format?)
+	var groupURL string
+	dumpCmd := cobra.Command{
+		Use:   "dumpwall",
+		Short: "List group posts in reversed order (from old to new).",
+		Args:  cobra.MaximumNArgs(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			groupName := parseGroupURL(groupURL)
+			r.FoldConsume(
+				vk.GetPosts(client, groupName.Unwrap()),
+				func(x s.Stream[vk.Post]) {
+					s.ForEach(
+						x,
+						func(p vk.Post) {
+							fmt.Printf("https://vk.com/wall%d_%d\n", p.Owner, p.ID)
+							fmt.Println("Date: ", time.Unix(int64(p.Date), 0))
+							fmt.Println(p.Text)
+							if len(p.CopyHistory) > 0 {
+								fmt.Println("Repost: ", p.CopyHistory[0])
+							}
+							fmt.Println()
+						},
+					)
+				},
+				func(err error) {
+					fmt.Printf("error: %v\n", err)
+				},
+			)
+			return nil
+		},
+		Example: "vkutils revposts https://vk.com/abobus_official",
+	}
+	dumpCmd.Flags().StringVarP(&groupURL, "url", "u", "", "url of vk group")
+	dumpCmd.MarkFlagRequired("url")
+	return &dumpCmd
+}
+
+func main() {
+	var client vk.VKClient
+	rootCmd := cobra.Command{
+		Use:   "vkutils",
+		Short: "VK data extraction tools. Need VK_ACCESS_TOKEN env var to work with VK api.",
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+			if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
+				return errors.New("VK_ACCESS_TOKEN was not found in env vars")
+			}
+			client = vk.NewVKClient(os.Getenv("VK_ACCESS_TOKEN"))
+			return nil
+		},
+	}
+
+	rootCmd.AddCommand(newRepostCommand(&client))
+	rootCmd.AddCommand(newDumpCommand(&client))
+	rootCmd.AddCommand(newCountCmd(&client))
 
 	start := time.Now()
 	if err := rootCmd.Execute(); err != nil {
