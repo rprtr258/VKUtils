@@ -99,7 +99,7 @@ func main() {
 					s.ForEach(
 						s.Take(ss, 1), // TODO: remove
 						func(s vk.PostID) {
-							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.OwnerID, s.ID)
+							fmt.Printf("https://vk.com/wall%d_%d\n", s.OwnerID, s.ID)
 						},
 					)
 					return nil
