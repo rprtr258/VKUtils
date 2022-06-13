@@ -211,7 +211,7 @@ func newDumpCommand(client *vk.VKClient) *cobra.Command {
 	return &dumpCmd
 }
 
-func main() {
+func newRootCmd() *cobra.Command {
 	var client vk.VKClient
 	rootCmd := cobra.Command{
 		Use:   "vkutils",
@@ -228,6 +228,11 @@ func main() {
 	rootCmd.AddCommand(newRepostCommand(&client))
 	rootCmd.AddCommand(newDumpCommand(&client))
 	rootCmd.AddCommand(newCountCmd(&client))
+	return &rootCmd
+}
+
+func main() {
+	rootCmd := newRootCmd()
 
 	start := time.Now()
 	if err := rootCmd.Execute(); err != nil {
