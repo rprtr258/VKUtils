@@ -89,17 +89,17 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sharersStream := r.FlatMap(
 				parsePostURL(postURL),
-				func(postID f.Pair[vk.UserID, uint]) r.Result[s.Stream[vk.Sharer]] {
+				func(postID f.Pair[vk.UserID, uint]) r.Result[s.Stream[vk.PostID]] {
 					return vk.GetReposters(&client, postID.Left, postID.Right)
 				},
 			)
 			return r.Fold(
 				sharersStream,
-				func(ss s.Stream[vk.Sharer]) error {
+				func(ss s.Stream[vk.PostID]) error {
 					s.ForEach(
 						s.Take(ss, 1), // TODO: remove
-						func(s vk.Sharer) {
-							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.UserID, s.RepostID)
+						func(s vk.PostID) {
+							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.OwnerID, s.PostID)
 						},
 					)
 					return nil

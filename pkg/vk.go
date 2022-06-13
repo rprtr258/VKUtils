@@ -54,17 +54,20 @@ type UserList struct {
 	} `json:"response"`
 }
 
+// PostID is pair of post author ID and post index.
+type PostID struct {
+	OwnerID UserID `json:"owner_id"`
+	PostID  uint   `json:"id"`
+}
+
 // Post is post on some user or group wall.
 // TODO: separate api structs and lib structs(?)
 type Post struct {
-	Owner       UserID `json:"owner_id"`
-	ID          uint   `json:"id"`
-	Date        uint   `json:"date"`
-	Text        string `json:"text"`
-	CopyHistory []struct {
-		PostID  uint   `json:"id"`
-		OwnerID UserID `json:"owner_id"`
-	} `json:"copy_history"`
+	Owner       UserID   `json:"owner_id"`
+	ID          uint     `json:"id"`
+	Date        uint     `json:"date"`
+	Text        string   `json:"text"`
+	CopyHistory []PostID `json:"copy_history"`
 }
 
 type wallPostsResponse struct {

@@ -118,20 +118,14 @@ func getPotentialUserIDs(client *VKClient, ownerID UserID, postID uint) s.Stream
 	return s.Chain(likers, potentialUserIDs)
 }
 
-// Sharer is post shared user.
-type Sharer struct {
-	UserID   UserID
-	RepostID uint // TODO: uint?
-}
-
-func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[Sharer] {
+func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[PostID] {
 	tasks := s.MapFilter(
 		userIDs,
-		func(userID UserID) f.Option[f.Task[Sharer]] {
+		func(userID UserID) f.Option[f.Task[PostID]] {
 			return f.Map(
 				findRepost(client, userID, post),
-				f.ToTaskFactory(func(postID uint) Sharer {
-					return Sharer{userID, postID}
+				f.ToTaskFactory(func(postID uint) PostID {
+					return PostID{userID, postID}
 				}),
 			)
 		},
@@ -139,11 +133,11 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 	return s.Parallel(userCheckRepostsThreads, tasks)
 }
 
-func GetReposters(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[Sharer]] {
+func GetReposters(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[PostID]] {
 	// TODO: separate modification of post and creation of result
 	return r.Map(
 		client.getPostTime(ownerID, postID),
-		func(postDate uint) s.Stream[Sharer] {
+		func(postDate uint) s.Stream[PostID] {
 			uniqueIDs := s.Unique(getPotentialUserIDs(client, ownerID, postID))
 			return getCheckedIDs(client, Post{
 				Owner: ownerID,

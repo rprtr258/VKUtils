@@ -8,12 +8,6 @@ import (
 	s "github.com/rprtr258/goflow/stream"
 )
 
-// PostID is pair of post author ID and post index.
-type PostID struct {
-	OwnerID UserID
-	PostID  uint
-}
-
 type UserSets struct {
 	GroupMembers []UserID
 	Friends      []UserID
