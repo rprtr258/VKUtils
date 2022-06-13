@@ -37,7 +37,7 @@ const (
 	waitTimeToRetry   = time.Millisecond * 500
 )
 
-// UserID is id of some user or group.
+// UserID is id of some user if positive or group if negative.
 type UserID int
 
 type User struct {

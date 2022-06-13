@@ -107,7 +107,6 @@ func getPotentialUserIDs(client *VKClient, ownerID UserID, postID uint) s.Stream
 	// scan likers
 	likers := s.Map(client.getLikes(ownerID, postID), userInfoToUserID)
 
-	// TODO: "Error(15) Access denied: group hide members"
 	// scan group members/friends of post owner
 	var potentialUserIDs s.Stream[UserID]
 	if ownerID < 0 { // owner is group
