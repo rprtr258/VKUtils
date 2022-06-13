@@ -30,8 +30,7 @@ func (pager *findRepostPager) NextPage() r.Result[f.Option[[]Post]] {
 		return r.Success(f.None[[]Post]())
 	}
 	// log.Println("GET USER LIST", xs.offset, xs.total)
-	pager.params.Set("offset", fmt.Sprint(pager.offset))
-	wallPosts := pager.client.getWallPosts(pager.params)
+	wallPosts := pager.client.getWallPosts(pager.params, "offset", fmt.Sprint(pager.offset))
 	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
 	// 	errMsg := err.Error()
 	// 	// TODO: change to error structs

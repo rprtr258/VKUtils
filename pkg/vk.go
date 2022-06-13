@@ -274,8 +274,8 @@ func (client *VKClient) getFollowers(userId UserID) s.Stream[User] {
 	), 1000)
 }
 
-func (client *VKClient) getWallPosts(params url.Values) r.Result[WallPosts] {
-	body := client.apiRequest("wall.get", params)
+func (client *VKClient) getWallPosts(params url.Values, params2 ...string) r.Result[WallPosts] {
+	body := client.apiRequest("wall.get", params, params2...)
 	return r.FlatMap(body, jsonUnmarshal[WallPosts])
 }
 
