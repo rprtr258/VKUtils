@@ -14,7 +14,6 @@ type PageSize uint
 
 const (
 	wallGetPageSize         = PageSize(100)
-	wallGetPageSizeString   = "100" // TODO: fmt.Sprint(wallGetPageSize) (init?)
 	userCheckRepostsThreads = 10
 )
 
@@ -66,7 +65,7 @@ func findRepostImpl(client *VKClient, ownerID UserID) s.Stream[Post] {
 		total:  f.None[uint](),
 		params: MakeUrlValues(map[string]any{
 			"owner_id": ownerID,
-			"count":    wallGetPageSizeString,
+			"count":    wallGetPageSize,
 		}),
 	})
 }
