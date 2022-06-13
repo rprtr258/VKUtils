@@ -3,6 +3,8 @@ version: '3'
 dotenv: [".env"]
 
 tasks:
+  lint:
+    golangci-lint run --exclude-use-default=false --disable-all --enable=revive
   todo:
     rg 'TODO' --glob '**/*.go'
   reposts:
