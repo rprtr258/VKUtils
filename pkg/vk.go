@@ -103,6 +103,9 @@ type VkError struct {
 	Code    uint   `json:"error_code"`
 	Message string `json:"error_msg"`
 }
+type VkErrorResponse struct {
+	Err VkError `json:"error"`
+}
 
 func (err *VkError) Error() string {
 	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
@@ -156,10 +159,7 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 		}
 		// log.Println("ON ", method, " ", params, " GOT:\n", string(body))
 		// move out parsing response
-		type Errrr struct {
-			Err VkError `json:"error"`
-		}
-		errr := jsonUnmarshal[Errrr](body)
+		errr := jsonUnmarshal[VkErrorResponse](body)
 		if errr.IsErr() {
 			return r.Err[[]byte](err)
 		}
