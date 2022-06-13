@@ -9,12 +9,6 @@ import (
 	s "github.com/rprtr258/goflow/stream"
 )
 
-type W struct {
-	Response struct {
-		Items []Post `json:"items"`
-	} `json:"response"`
-}
-
 func max0XminusY(x uint, y uint) uint {
 	if x < y {
 		return 0
@@ -22,6 +16,7 @@ func max0XminusY(x uint, y uint) uint {
 	return x - y
 }
 
+// TODO: remove
 type V struct {
 	Response struct {
 		Count uint `json:"count"`
@@ -53,8 +48,8 @@ func GetReversedPosts(client *VKClient, groupName string) r.Result[s.Stream[Post
 						"count", fmt.Sprint(wallGetPageSize),
 					))
 				},
-				jsonUnmarshal[W],
-				func(w W) r.Result[s.Stream[Post]] {
+				jsonUnmarshal[WallPosts],
+				func(w WallPosts) r.Result[s.Stream[Post]] {
 					slice.ReverseInplace(w.Response.Items)
 					return r.Success(s.FromSlice(w.Response.Items))
 				},
