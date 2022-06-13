@@ -318,9 +318,9 @@ func (client *VKClient) getLikes(postID PostID) s.Stream[User] {
 	}), getLikesPageSize)
 }
 
-func (client *VKClient) getFollowers(userId UserID) s.Stream[User] {
+func (client *VKClient) getFollowers(userID UserID) s.Stream[User] {
 	return client.getUserList("users.getFollowers", MakeUrlValues(map[string]any{
-		"user_id": userId,
+		"user_id": userID,
 		"fields":  "first_name,last_name",
 	}), usersGetFollowersPageSize)
 }
