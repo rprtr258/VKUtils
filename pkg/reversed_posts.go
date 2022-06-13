@@ -1,9 +1,6 @@
 package vkutils
 
 import (
-	"fmt"
-	"net/url"
-
 	r "github.com/rprtr258/goflow/result"
 	"github.com/rprtr258/goflow/slice"
 	s "github.com/rprtr258/goflow/stream"
@@ -32,21 +29,21 @@ func GetReversedPosts(client *VKClient, groupName string) r.Result[s.Stream[Post
 		func(groupID UserID) r.Result[s.Stream[Post]] {
 			return r.FlatMap3(
 				r.Map(r.FlatMap(
-					client.apiRequest("wall.get", url.Values{
-						"owner_id": []string{fmt.Sprint(groupID)},
-						"offset":   []string{"0"},
-						"count":    []string{"1"},
-					}),
+					client.apiRequest("wall.get", MakeUrlValues(map[string]any{
+						"owner_id": groupID,
+						"offset":   "0",
+						"count":    "1",
+					})),
 					jsonUnmarshal[V],
 				), func(v V) uint {
 					return v.Response.Count
 				}),
 				func(postsCount uint) r.Result[[]byte] {
-					return client.apiRequest("wall.get", MakeUrlValues(
-						"owner_id", fmt.Sprint(groupID),
-						"offset", fmt.Sprint(max0XminusY(postsCount, uint(wallGetPageSize))),
-						"count", fmt.Sprint(wallGetPageSize),
-					))
+					return client.apiRequest("wall.get", MakeUrlValues(map[string]any{
+						"owner_id": groupID,
+						"offset":   max0XminusY(postsCount, uint(wallGetPageSize)),
+						"count":    wallGetPageSize,
+					}))
 				},
 				jsonUnmarshal[WallPosts],
 				func(w WallPosts) r.Result[s.Stream[Post]] {

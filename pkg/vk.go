@@ -240,34 +240,34 @@ func (client *VKClient) getUserList(method string, params url.Values, pageSize P
 }
 
 func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[User] {
-	return client.getUserList("groups.getMembers", MakeUrlValues(
-		"group_id", fmt.Sprint(-groupID),
-		"fields", "first_name,last_name",
-	), groupsGetMembersLimit)
+	return client.getUserList("groups.getMembers", MakeUrlValues(map[string]any{
+		"group_id": -groupID,
+		"fields":   "first_name,last_name",
+	}), groupsGetMembersLimit)
 }
 
 func (client *VKClient) getFriends(userID UserID) s.Stream[User] {
-	return client.getUserList("friends.get", MakeUrlValues(
-		"user_id", fmt.Sprint(userID),
-		"fields", "first_name,last_name",
-	), getFriendsLimit)
+	return client.getUserList("friends.get", MakeUrlValues(map[string]any{
+		"user_id": userID,
+		"fields":  "first_name,last_name",
+	}), getFriendsLimit)
 }
 
 func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[User] {
-	return client.getUserList("likes.getList", MakeUrlValues(
-		"type", "post",
-		"owner_id", fmt.Sprint(ownerID),
-		"item_id", fmt.Sprint(postID),
-		"skip_own", "0",
-		"extended", "1",
-	), getLikesListLimit)
+	return client.getUserList("likes.getList", MakeUrlValues(map[string]any{
+		"type":     "post",
+		"owner_id": ownerID,
+		"item_id":  postID,
+		"skip_own": "0",
+		"extended": "1",
+	}), getLikesListLimit)
 }
 
 func (client *VKClient) getFollowers(userId UserID) s.Stream[User] {
-	return client.getUserList("users.getFollowers", MakeUrlValues(
-		"user_id", fmt.Sprint(userId),
-		"fields", "first_name,last_name",
-	), 1000)
+	return client.getUserList("users.getFollowers", MakeUrlValues(map[string]any{
+		"user_id": userId,
+		"fields":  "first_name,last_name",
+	}), 1000)
 }
 
 func (client *VKClient) getWallPosts(params url.Values, params2 ...string) r.Result[WallPosts] {
@@ -277,9 +277,9 @@ func (client *VKClient) getWallPosts(params url.Values, params2 ...string) r.Res
 
 // TODO: return time.Time
 func (client *VKClient) getPostTime(ownerID UserID, postID uint) r.Result[uint] {
-	body := client.apiRequest("wall.getById", url.Values{
-		"posts": []string{fmt.Sprintf("%d_%d", ownerID, postID)},
-	})
+	body := client.apiRequest("wall.getById", MakeUrlValues(map[string]any{
+		"posts": fmt.Sprintf("%d_%d", ownerID, postID),
+	}))
 	type V struct {
 		Response []struct {
 			Date uint `json:"date"`
@@ -305,16 +305,18 @@ func (client *VKClient) getGroupID(groupName string) r.Result[UserID] {
 	}
 
 	vR := r.FlatMap(
-		client.apiRequest("groups.getById", MakeUrlValues("group_id", groupName)),
+		client.apiRequest("groups.getById", MakeUrlValues(map[string]any{
+			"group_id": groupName,
+		})),
 		jsonUnmarshal[V],
 	)
 	return r.Map(vR, func(v V) UserID { return UserID(-v.Response[0].ID) })
 }
 
-func MakeUrlValues(kvs ...string) url.Values {
+func MakeUrlValues(kvs map[string]any) url.Values {
 	res := make(url.Values)
-	for i := 0; i < len(kvs); i += 2 {
-		res[kvs[i]] = []string{kvs[i+1]}
+	for k, v := range kvs {
+		res.Set(k, fmt.Sprint(v))
 	}
 	return res
 }
