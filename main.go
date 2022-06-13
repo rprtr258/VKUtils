@@ -151,6 +151,7 @@ func main() {
 		friends        []string
 		followers      []string
 		postCommenters []string
+		userProvided   []string
 	)
 	countCmd := cobra.Command{
 		Use:   "count",
@@ -174,6 +175,11 @@ func main() {
 				errors = append(errors, fmt.Sprintf("error parsing follower ids: %v", followerIDs.UnwrapErr()))
 			}
 
+			userIDs := parseUserIDsList(userProvided)
+			if userIDs.IsErr() {
+				errors = append(errors, fmt.Sprintf("error parsing follower ids: %v", userIDs.UnwrapErr()))
+			}
+
 			postLikerIDs := parsePostsList(postLikers)
 			if postLikerIDs.IsErr() {
 				errors = append(errors, fmt.Sprintf("error parsing post ids for likers: %v", postLikerIDs.UnwrapErr()))
@@ -192,6 +198,7 @@ func main() {
 				GroupMembers: groupIDs.Unwrap(),
 				Friends:      friendIDs.Unwrap(),
 				Followers:    followerIDs.Unwrap(),
+				Users:        userIDs.Unwrap(),
 				Likers:       postLikerIDs.Unwrap(),
 				Commenters:   postCommenterIDs.Unwrap(),
 			}) {
@@ -206,6 +213,7 @@ func main() {
 	countCmd.Flags().StringSliceVarP(&followers, "followers", "w", []string{}, "group ids members of which to ")
 	countCmd.Flags().StringSliceVarP(&postLikers, "post-likers", "l", []string{}, "group ids members of which to ")
 	countCmd.Flags().StringSliceVarP(&postCommenters, "commenters", "c", []string{}, "group ids members of which to ")
+	countCmd.Flags().StringSliceVarP(&userProvided, "users", "u", []string{}, "group ids members of which to ")
 	rootCmd.AddCommand(&countCmd)
 
 	start := time.Now()
