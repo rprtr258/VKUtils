@@ -224,7 +224,6 @@ func newRootCmd() *cobra.Command {
 			return nil
 		},
 	}
-
 	rootCmd.AddCommand(newRepostCommand(&client))
 	rootCmd.AddCommand(newDumpCommand(&client))
 	rootCmd.AddCommand(newCountCmd(&client))
