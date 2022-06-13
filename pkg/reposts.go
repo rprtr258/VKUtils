@@ -1,6 +1,9 @@
 package vkutils
 
 import (
+	"fmt"
+	"net/url"
+
 	f "github.com/rprtr258/goflow/fun"
 	r "github.com/rprtr258/goflow/result"
 	s "github.com/rprtr258/goflow/stream"
@@ -14,25 +17,55 @@ const (
 	userCheckRepostsThreads = 10
 )
 
+type findRepostPager struct {
+	client *VKClient
+	offset uint
+	total  f.Option[uint]
+	params url.Values
+}
+
+// TODO: binary search
+func (pager *findRepostPager) NextPage() r.Result[f.Option[[]Post]] {
+	if pager.total.IsSome() && pager.offset >= pager.total.Unwrap() {
+		return r.Success(f.None[[]Post]())
+	}
+	// log.Println("GET USER LIST", xs.offset, xs.total)
+	pager.params.Set("offset", fmt.Sprint(pager.offset))
+	wallPosts := pager.client.getWallPosts(pager.params)
+	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
+	// 	errMsg := err.Error()
+	// 	// TODO: change to error structs
+	// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
+	// 		errMsg == "Error(18) User was deleted or banned" ||
+	// 		errMsg == "Error(30) This profile is private" {
+	// 		return []Post{}
+	// 	}
+	// 	return Fail[Repost](err)
+	// })
+	return r.Map(
+		wallPosts,
+		func(ul WallPosts) f.Option[[]Post] {
+			pager.offset += uint(wallGetPageSize)
+			pager.total = f.Some(ul.Response.Count)
+			return f.Some(ul.Response.Items)
+		},
+	)
+}
+
 // TODO: limit extracted fields.
 func findRepostImpl(client *VKClient, ownerID UserID) s.Stream[Post] {
-	return getPaged(client, wallGetPageSize, func(offset uint) r.Result[Page[Post]] {
-		return client.getWallPosts(offset, wallGetPageSize, ownerID)
-		// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
-		// 	errMsg := err.Error()
-		// 	// TODO: change to error structs
-		// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
-		// 		errMsg == "Error(18) User was deleted or banned" ||
-		// 		errMsg == "Error(30) This profile is private" {
-		// 		return []Post{}
-		// 	}
-		// 	return Fail[Repost](err)
-		// })
+	return getPaged[Post](&findRepostPager{
+		client: client,
+		offset: 0,
+		total:  f.None[uint](),
+		params: url.Values{
+			"owner_id": []string{fmt.Sprint(ownerID)},
+			"count":    []string{fmt.Sprint(wallGetPageSize)},
+		},
 	})
 }
 
 // Returns either found (or not found) repost's post id
-// TODO: binary search?
 func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
 	allPosts := findRepostImpl(client, userID)
 	pinnedPostMaybe := s.Head(allPosts)
