@@ -178,24 +178,18 @@ func (client *VKClient) apiRequest(method string, params url.Values) r.Result[[]
 	return r.Err[[]byte](fmt.Errorf("%s(%v) = Timeout", method, params))
 }
 
-type userListImpl struct {
+type userPagesImpl struct {
 	client    *VKClient
 	method    string
 	pageSize  PageSize
 	offset    uint
 	total     f.Option[uint]
 	urlParams url.Values
-
-	curPage s.Stream[UserInfo]
 }
 
-func (xs *userListImpl) Next() (xxx f.Option[UserInfo]) {
-	if x := xs.curPage.Next(); x.IsSome() {
-		return x
-	}
-
+func (xs *userPagesImpl) Next() f.Option[[]UserInfo] {
 	if xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
-		return f.None[UserInfo]()
+		return f.None[[]UserInfo]()
 	}
 	// log.Println("GET USER LIST", xs.offset, xs.total)
 	xs.urlParams.Set("offset", fmt.Sprint(xs.offset))
@@ -203,14 +197,14 @@ func (xs *userListImpl) Next() (xxx f.Option[UserInfo]) {
 	onePageOfUsers := r.FlatMap(body, jsonUnmarshal[UserList])
 	return r.Fold(
 		onePageOfUsers,
-		func(batch UserList) f.Option[UserInfo] {
+		func(batch UserList) f.Option[[]UserInfo] {
 			xs.offset += uint(xs.pageSize)
-			xs.total, xs.curPage = f.Some(batch.Response.Count), s.FromSlice(batch.Response.Items)
-			return xs.curPage.Next()
+			xs.total = f.Some(batch.Response.Count)
+			return f.Some(batch.Response.Items)
 		},
-		func(err error) f.Option[UserInfo] {
+		func(err error) f.Option[[]UserInfo] {
 			log.Println("ERROR WHILE GETTING PAGE: ", err)
-			return f.None[UserInfo]()
+			return f.None[[]UserInfo]()
 		},
 	)
 }
@@ -222,15 +216,14 @@ func (client *VKClient) getUserList(method string, params url.Values, pageSize P
 		urlParams[k] = v
 	}
 	urlParams.Set("count", pageSizeStr)
-	return &userListImpl{
+	return s.Paged[UserInfo](&userPagesImpl{
 		client:    client,
 		method:    method,
 		pageSize:  pageSize,
 		offset:    0,
 		total:     f.None[uint](),
 		urlParams: urlParams,
-		curPage:   s.NewStreamEmpty[UserInfo](),
-	}
+	})
 }
 
 func (client *VKClient) getGroupMembers(groupID UserID) s.Stream[UserInfo] {

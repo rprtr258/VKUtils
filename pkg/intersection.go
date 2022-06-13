@@ -23,15 +23,15 @@ type UserSets struct {
 	// TODO: commenters
 }
 
-func MembershipCount(client *VKClient, include UserSets) []f.Pair[UserInfo, int] {
+func MembershipCount(client *VKClient, include UserSets) []f.Pair[User, int] {
 	// TODO: parallelize
 	chans := s.Chain(
 		s.Map(s.FromSlice(include.Friends), client.getFriends),
 		s.Map(s.FromSlice(include.GroupMembers), client.getGroupMembers),
 		s.Map(s.FromSlice(include.Followers), client.getFollowers),
-		s.Map(s.FromSlice(include.Likers), func(postID PostID) s.Stream[UserInfo] { return client.getLikes(postID.OwnerID, postID.PostID) }),
+		s.Map(s.FromSlice(include.Likers), func(postID PostID) s.Stream[User] { return client.getLikes(postID.OwnerID, postID.PostID) }),
 	)
-	mp := s.Reduce(f.NewEmptyCounter[UserInfo](), f.CounterPlus[UserInfo], s.Map(chans, s.CollectCounter[UserInfo]))
+	mp := s.Reduce(f.NewEmptyCounter[User](), f.CounterPlus[User], s.Map(chans, s.CollectCounter[User]))
 	res := slice.FromMap(mp)
 	sort.Slice(res, func(i, j int) bool { return res[i].Right > res[j].Right })
 	return res

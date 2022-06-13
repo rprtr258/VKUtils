@@ -95,7 +95,7 @@ func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
 	return f.Map(repostMaybe, func(w Post) uint { return w.ID })
 }
 
-func userInfoToUserID(info UserInfo) UserID {
+func userInfoToUserID(info User) UserID {
 	return info.ID
 }
 
