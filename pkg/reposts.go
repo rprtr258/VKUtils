@@ -133,7 +133,6 @@ func getCheckedIDs(client *VKClient, postID PostID, postDate uint, userIDs s.Str
 }
 
 func GetReposters(client *VKClient, postID PostID) r.Result[s.Stream[PostID]] {
-	// TODO: separate modification of post and creation of result
 	return r.Map(
 		client.getPostTime(postID),
 		func(postDate uint) s.Stream[PostID] {
