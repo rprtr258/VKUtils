@@ -61,7 +61,6 @@ type PostID struct {
 }
 
 // Post is post on some user or group wall.
-// TODO: separate api structs and lib structs(?)
 type Post struct {
 	Owner       UserID   `json:"owner_id"`
 	ID          uint     `json:"id"`
