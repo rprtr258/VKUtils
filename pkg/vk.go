@@ -218,6 +218,9 @@ func (xs *pagedImpl[A]) Next() f.Option[[]A] {
 	return r.Fold(
 		pageResult,
 		func(page Page[A]) f.Option[[]A] {
+			// if xs.offset == 0 {
+			// 	log.Printf("GETTING PAGED DATA WITH %d ENTRIES\n", page.Total())
+			// }
 			xs.total = f.Some(page.Total())
 			xs.offset += uint(xs.pageSize)
 			return f.Some(page.Items())

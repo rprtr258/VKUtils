@@ -1,8 +1,6 @@
 package vkutils
 
 import (
-	"log"
-
 	f "github.com/rprtr258/goflow/fun"
 	r "github.com/rprtr258/goflow/result"
 	s "github.com/rprtr258/goflow/stream"
@@ -16,55 +14,20 @@ const (
 	userCheckRepostsThreads = 10
 )
 
-type repostPagesImpl struct {
-	client   *VKClient
-	ownerID  UserID
-	offset   uint
-	total    f.Option[uint]
-	pageSize PageSize // TODO: rename to page size everywhere
-}
-
-func (xs *repostPagesImpl) Next() f.Option[[]Post] {
-	if xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
-		return f.None[[]Post]()
-	}
-	pageResult := xs.client.getWallPosts(xs.offset, xs.pageSize, xs.ownerID)
-	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
-	// 	errMsg := err.Error()
-	// 	// TODO: change to error structs
-	// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
-	// 		errMsg == "Error(18) User was deleted or banned" ||
-	// 		errMsg == "Error(30) This profile is private" {
-	// 		return Lift[Repost](NOT_FOUND_REPOST)
-	// 	}
-	// 	return Fail[Repost](err)
-	// })
-	return r.Fold(
-		pageResult,
-		func(page Page[Post]) f.Option[[]Post] {
-			// if xs.offset == 0 {
-			// 	log.Printf("CHECKING USER %d WITH %d POSTS\n", xs.ownerID, totalAndFirstBatch.Response.Count)
-			// }
-			xs.total = f.Some(page.Total())
-			xs.offset += uint(xs.pageSize)
-			return f.Some(page.Items())
-		},
-		func(err error) f.Option[[]Post] {
-			log.Println("ERROR WHILE GETTING PAGE: ", err)
-			return f.None[[]Post]()
-		},
-	)
-}
-
-// TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic.
 // TODO: limit extracted fields.
 func findRepostImpl(client *VKClient, ownerID UserID) s.Stream[Post] {
-	return s.Paged[Post](&repostPagesImpl{
-		client:   client,
-		ownerID:  ownerID,
-		offset:   0,
-		total:    f.None[uint](),
-		pageSize: wallGetPageSize,
+	return getPaged(client, wallGetPageSize, func(offset uint) r.Result[Page[Post]] {
+		return client.getWallPosts(offset, wallGetPageSize, ownerID)
+		// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
+		// 	errMsg := err.Error()
+		// 	// TODO: change to error structs
+		// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
+		// 		errMsg == "Error(18) User was deleted or banned" ||
+		// 		errMsg == "Error(30) This profile is private" {
+		// 		return []Post{}
+		// 	}
+		// 	return Fail[Repost](err)
+		// })
 	})
 }
 
