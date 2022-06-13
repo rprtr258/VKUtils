@@ -8,43 +8,30 @@ import (
 	s "github.com/rprtr258/goflow/stream"
 )
 
+type PageSize uint
+
 const (
-	wallGetCount       = 100
-	wallGetCountString = "100" // TODO: fmt.Sprint(wallGet_count) (init?)
-	// userCheckRepostsThreads = 10
+	wallGetPageSize = PageSize(100)
+	// wallGetPageSizeString = "100" // TODO: fmt.Sprint(wallGetPageSize) (init?)
+	userCheckRepostsThreads = 10
 )
 
-type findRepostImplImpl struct {
-	client  *VKClient
-	ownerID UserID
-	offset  uint
-	total   f.Option[uint]
-	count   uint
-
-	curPage s.Stream[Post]
+type repostPagesImpl struct {
+	client   *VKClient
+	ownerID  UserID
+	offset   uint
+	total    f.Option[uint]
+	pageSize PageSize // TODO: rename to page size everywhere
 }
 
-// TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic.
-// TODO: limit extracted fields.
-func (xs *findRepostImplImpl) Next() f.Option[Post] {
-	// TODO: move out to flatten
-	if x := xs.curPage.Next(); x.IsSome() {
-		return x
+func (xs *repostPagesImpl) Next() f.Option[[]Post] {
+	if xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
+		return f.None[[]Post]()
 	}
-
-	// log.Println("REPOST CHECK", xs.offset)
-	if /*xs.offset > 0*/ xs.total.IsSome() && xs.offset >= xs.total.Unwrap() {
-		return f.None[Post]()
-	}
-	// body := apiRequest(xs.client, "wall.get", url.Values{
-	// 	"owner_id": []string{xs.ownerIDString},
-	// 	"offset":   []string{fmt.Sprint(xs.offset)},
-	// 	"count":    []string{xs.countString},
-	// })
-	onePageOfPosts := xs.client.getWallPosts(xs.offset, xs.count, xs.ownerID)
+	onePageOfPosts := xs.client.getWallPosts(xs.offset, xs.pageSize, xs.ownerID)
 	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
 	// 	errMsg := err.Error()
-	// 	// TODO: change to error structs?
+	// 	// TODO: change to error structs
 	// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
 	// 		errMsg == "Error(18) User was deleted or banned" ||
 	// 		errMsg == "Error(30) This profile is private" {
@@ -54,30 +41,32 @@ func (xs *findRepostImplImpl) Next() f.Option[Post] {
 	// })
 	return r.Fold(
 		onePageOfPosts,
-		func(totalAndFirstBatch WallPosts) f.Option[Post] {
-			xs.total, xs.curPage = f.Some(totalAndFirstBatch.Response.Count), s.FromSlice(totalAndFirstBatch.Response.Items)
+		func(totalAndFirstBatch WallPosts) f.Option[[]Post] {
+			var curPage []Post
+			xs.total, curPage = f.Some(totalAndFirstBatch.Response.Count), totalAndFirstBatch.Response.Items
 			// if xs.offset == 0 {
 			// 	log.Printf("CHECKING USER %d WITH %d POSTS\n", xs.ownerID, totalAndFirstBatch.Response.Count)
 			// }
-			xs.offset += xs.count
-			return xs.curPage.Next()
+			xs.offset += uint(xs.pageSize)
+			return f.Some(curPage)
 		},
-		func(err error) f.Option[Post] {
+		func(err error) f.Option[[]Post] {
 			log.Println("ERROR WHILE GETTING PAGE: ", err)
-			return f.None[Post]()
+			return f.None[[]Post]()
 		},
 	)
 }
 
+// TODO: abstract findRepostImplImpl and getUserListImpl cuz they have similar structure and logic.
+// TODO: limit extracted fields.
 func findRepostImpl(client *VKClient, ownerID UserID) s.Stream[Post] {
-	return &findRepostImplImpl{
-		client:  client,
-		ownerID: ownerID,
-		offset:  0,
-		total:   f.None[uint](),
-		count:   wallGetCount,
-		curPage: s.NewStreamEmpty[Post](),
-	}
+	return s.Paged[Post](&repostPagesImpl{
+		client:   client,
+		ownerID:  ownerID,
+		offset:   0,
+		total:    f.None[uint](),
+		pageSize: wallGetPageSize,
+	})
 }
 
 // Returns either found (or not found) repost's post id
@@ -146,7 +135,7 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 			)
 		},
 	)
-	return s.Parallel(10, tasks)
+	return s.Parallel(userCheckRepostsThreads, tasks)
 }
 
 func GetReposters(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[Sharer]] {

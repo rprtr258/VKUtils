@@ -22,23 +22,6 @@ type UserSets struct {
 	// TODO: commenters
 }
 
-func count[A comparable](xs s.Stream[A]) map[A]int {
-	res := make(map[A]int)
-	s.ForEach(xs, func(a A) { res[a]++ })
-	return res
-}
-
-func sumCounters[A comparable](a, b map[A]int) map[A]int {
-	res := make(map[A]int, len(a))
-	for k, v := range a {
-		res[k] += v
-	}
-	for k, v := range b {
-		res[k] += v
-	}
-	return res
-}
-
 func MembershipCount(client *VKClient, include UserSets) []f.Pair[UserInfo, int] {
 	// TODO: parallelize
 	chans := s.Chain(
@@ -47,11 +30,8 @@ func MembershipCount(client *VKClient, include UserSets) []f.Pair[UserInfo, int]
 		s.Map(s.FromSlice(include.Followers), client.getFollowers),
 		s.Map(s.FromSlice(include.Likers), func(postID PostID) s.Stream[UserInfo] { return client.getLikes(postID.OwnerID, postID.PostID) }),
 	)
-	mp := s.Reduce(map[UserInfo]int{}, sumCounters[UserInfo], s.Map(chans, count[UserInfo]))
-	res := make([]f.Pair[UserInfo, int], 0, len(mp))
-	for k, v := range mp {
-		res = append(res, f.NewPair(k, v))
-	}
+	mp := s.Reduce(f.NewEmptyCounter[UserInfo](), f.CounterPlus[UserInfo], s.Map(chans, s.CollectCounter[UserInfo]))
+	res := f.FromMap(mp)
 	sort.Slice(res, func(i, j int) bool { return res[i].Right > res[j].Right })
 	return res
 }

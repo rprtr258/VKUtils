@@ -181,7 +181,7 @@ func (client *VKClient) apiRequest(method string, params url.Values) r.Result[[]
 type userListImpl struct {
 	client    *VKClient
 	method    string
-	count     uint
+	pageSize  PageSize
 	offset    uint
 	total     f.Option[uint]
 	urlParams url.Values
@@ -204,7 +204,7 @@ func (xs *userListImpl) Next() (xxx f.Option[UserInfo]) {
 	return r.Fold(
 		onePageOfUsers,
 		func(batch UserList) f.Option[UserInfo] {
-			xs.offset += xs.count
+			xs.offset += uint(xs.pageSize)
 			xs.total, xs.curPage = f.Some(batch.Response.Count), s.FromSlice(batch.Response.Items)
 			return xs.curPage.Next()
 		},
@@ -215,7 +215,7 @@ func (xs *userListImpl) Next() (xxx f.Option[UserInfo]) {
 	)
 }
 
-func (client *VKClient) getUserList(method string, params url.Values, pageSize uint) s.Stream[UserInfo] {
+func (client *VKClient) getUserList(method string, params url.Values, pageSize PageSize) s.Stream[UserInfo] {
 	pageSizeStr := fmt.Sprint(pageSize)
 	urlParams := make(url.Values)
 	for k, v := range params {
@@ -225,7 +225,7 @@ func (client *VKClient) getUserList(method string, params url.Values, pageSize u
 	return &userListImpl{
 		client:    client,
 		method:    method,
-		count:     pageSize,
+		pageSize:  pageSize,
 		offset:    0,
 		total:     f.None[uint](),
 		urlParams: urlParams,
@@ -264,11 +264,11 @@ func (client *VKClient) getFollowers(userId UserID) s.Stream[UserInfo] {
 	), 1000)
 }
 
-func (client *VKClient) getWallPosts(offset uint, count uint, ownerID UserID) r.Result[WallPosts] {
+func (client *VKClient) getWallPosts(offset uint, pageSize PageSize, ownerID UserID) r.Result[WallPosts] {
 	body := client.apiRequest("wall.get", url.Values{
 		"owner_id": []string{fmt.Sprint(ownerID)},
 		"offset":   []string{fmt.Sprint(offset)},
-		"count":    []string{fmt.Sprint(count)},
+		"count":    []string{fmt.Sprint(pageSize)}, // TODO: is it in need to be provided?
 	})
 	return r.FlatMap(body, jsonUnmarshal[WallPosts])
 }

@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"net/url"
 
+	f "github.com/rprtr258/goflow/fun"
 	r "github.com/rprtr258/goflow/result"
 	s "github.com/rprtr258/goflow/stream"
 )
-
-const maxPostsCount = 100
 
 type W struct {
 	Response struct {
@@ -50,13 +49,13 @@ func GetReversedPosts(client *VKClient, groupName string) r.Result[s.Stream[Post
 				func(postsCount uint) r.Result[[]byte] {
 					return client.apiRequest("wall.get", MakeUrlValues(
 						"owner_id", fmt.Sprint(groupID),
-						"offset", fmt.Sprint(max0XminusY(postsCount, maxPostsCount)),
-						"count", fmt.Sprint(maxPostsCount),
+						"offset", fmt.Sprint(max0XminusY(postsCount, uint(wallGetPageSize))),
+						"count", fmt.Sprint(wallGetPageSize),
 					))
 				},
 				jsonUnmarshal[W],
 				func(w W) r.Result[s.Stream[Post]] {
-					return r.Success(s.FromSlice(s.ReverseSlice(w.Response.Items)))
+					return r.Success(s.FromSlice(f.ReverseSlice(w.Response.Items)))
 				},
 			)
 		},
