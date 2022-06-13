@@ -59,7 +59,6 @@ func (pager *findRepostPager) NextPage() r.Result[f.Option[[]Post]] {
 	)
 }
 
-// TODO: limit extracted fields.
 func findRepostImpl(client *VKClient, ownerID UserID) s.Stream[Post] {
 	return getPaged[Post](&findRepostPager{
 		client: client,
