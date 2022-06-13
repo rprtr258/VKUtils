@@ -7,7 +7,7 @@ tasks:
     rg 'TODO' --glob '**/*.go'
   reposts:
     go run main.go reposts -u https://vk.com/wall-149859311_975
-  revposts:
-    go run main.go revposts -u https://vk.com/tsgnmdmvn
+  dumpwall:
+    go run main.go dumpwall -u https://vk.com/tsgnmdmvn
   count:
     go run main.go count --friends 168715495 --groups -187839235

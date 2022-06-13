@@ -114,14 +114,14 @@ func main() {
 
 	// TODO: dump groups/profiles posts into database (own format?)
 	var groupURL string
-	revPostsUrl := cobra.Command{ // TODO: rename to dump posts
-		Use:   "revposts",
+	revPostsUrl := cobra.Command{
+		Use:   "dumpwall",
 		Short: "List group posts in reversed order (from old to new).",
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupName := parseGroupURL(groupURL)
 			r.FoldConsume(
-				vk.GetReversedPosts(&client, groupName.Unwrap()),
+				vk.GetPosts(&client, groupName.Unwrap()),
 				func(x s.Stream[vk.Post]) {
 					s.ForEach(
 						x,
@@ -129,6 +129,9 @@ func main() {
 							fmt.Printf("https://vk.com/wall%d_%d\n", p.Owner, p.ID)
 							fmt.Println("Date: ", time.Unix(int64(p.Date), 0))
 							fmt.Println(p.Text)
+							if len(p.CopyHistory) > 0 {
+								fmt.Println("Repost: ", p.CopyHistory[0])
+							}
 							fmt.Println()
 						},
 					)

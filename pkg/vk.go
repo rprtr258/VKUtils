@@ -196,7 +196,6 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 	for timeLimitTries < apiRequestRetries {
 		resp, err = client.client.Do(req)
 		if err != nil {
-			// TODO: fix, not working
 			return r.Err[[]byte](err)
 		}
 		defer func() {
