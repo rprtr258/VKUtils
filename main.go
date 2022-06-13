@@ -97,7 +97,8 @@ func main() {
 				sharersStream,
 				func(ss s.Stream[vk.PostID]) error {
 					s.ForEach(
-						s.Take(ss, 1), // TODO: remove
+						// s.Take(ss, 1), // TODO: remove
+						ss,
 						func(s vk.PostID) {
 							fmt.Printf("https://vk.com/wall%d_%d\n", s.OwnerID, s.ID)
 						},

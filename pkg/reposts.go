@@ -3,7 +3,6 @@ package vkutils
 import (
 	"fmt"
 	"log"
-	"net/url"
 
 	f "github.com/rprtr258/goflow/fun"
 	r "github.com/rprtr258/goflow/result"
@@ -17,82 +16,77 @@ const (
 	userCheckRepostsThreads = 10
 )
 
-type findRepostPager struct {
-	client *VKClient
-	offset uint
-	total  f.Option[uint]
-	params url.Values
-}
-
-// TODO: binary search
-func (pager *findRepostPager) NextPage() r.Result[f.Option[[]Post]] {
-	if pager.total.IsSome() && pager.offset >= pager.total.Unwrap() {
-		return r.Success(f.None[[]Post]())
-	}
-	wallPosts := r.TryRecover(
-		pager.client.getWallPosts(pager.params, "offset", fmt.Sprint(pager.offset)),
-		func(err error) r.Result[WallPosts] {
-			if errMsg, ok := err.(ApiCallError); ok {
-				switch errMsg.vkError.Code {
-				case accessDenied, userWasDeletedOrBanned, profileIsPrivate:
-					return r.Success(WallPosts{Response: wallPostsResponse{
-						Count: 0,
-						Items: []Post{},
-					}})
-				}
-			}
-			log.Printf("Error getting user posts: %T(%[1]v)\n", err)
-			return r.Err[WallPosts](err)
-		},
-	)
-	return r.Map(
-		wallPosts,
-		func(page WallPosts) f.Option[[]Post] {
-			// if pager.offset == 0 {
-			// 	log.Printf("SEARCHING REPOST IN USER WITH %d ENTRIES\n", page.Response.Count)
-			// }
-			pager.offset += uint(wallGetPageSize)
-			pager.total = f.Some(page.Response.Count)
-			return f.Some(page.Response.Items)
-		},
-	)
-}
-
-func findRepostImpl(client *VKClient, ownerID UserID) s.Stream[Post] {
-	return getPaged[Post](&findRepostPager{
-		client: client,
-		offset: 0,
-		total:  f.None[uint](),
-		params: MakeUrlValues(map[string]any{
-			"owner_id": ownerID,
-			"count":    wallGetPageSize,
-		}),
-	})
-}
-
 // Returns either found (or not found) repost's post id
 func findRepost(client *VKClient, userID UserID, postID PostID, postDate uint) f.Option[uint] {
-	allPosts := findRepostImpl(client, userID)
-	pinnedPostMaybe := s.Head(allPosts)
-	if pinnedPostMaybe.IsNone() {
+	params := MakeUrlValues(map[string]any{
+		"owner_id": userID,
+		"count":    wallGetPageSize,
+	})
+	w0Result := client.getWallPosts(params, "offset", "0")
+	if w0Result.IsErr() || w0Result.Unwrap().Response.Count == 0 {
 		return f.None[uint]()
 	}
-	pinnedPost := pinnedPostMaybe.Unwrap()
+	w0 := w0Result.Unwrap()
 	isRepostPredicate := func(post Post) bool {
 		copyHistory := post.CopyHistory
 		return len(copyHistory) != 0 && copyHistory[0].ID == postID.ID && copyHistory[0].OwnerID == postID.OwnerID
 	}
-	if isRepostPredicate(pinnedPost) {
-		return f.Some(pinnedPost.ID)
+	if len(w0.Response.Items) == 0 {
+		return f.None[uint]()
 	}
-	remainingPosts := s.TakeWhile(
-		allPosts,
-		func(w Post) bool {
-			return w.Date >= postDate
-		},
-	)
-	repostMaybe := s.Find(remainingPosts, isRepostPredicate)
-	return f.Map(repostMaybe, func(w Post) uint { return w.ID })
+	if isRepostPredicate(w0.Response.Items[0]) {
+		return f.Some(w0.Response.Items[0].ID)
+	}
+	if w0.Response.Items[len(w0.Response.Items)-1].Date <= postDate {
+		for _, post := range w0.Response.Items[1:] {
+			if isRepostPredicate(post) {
+				return f.Some(post.ID)
+			}
+		}
+		return f.None[uint]()
+	}
+	log.Printf("SEARCHING REPOST IN USER %d WITH %d ENTRIES\n", userID, w0.Response.Count)
+	l := uint(1)
+	r := (w0.Response.Count + uint(wallGetPageSize) - 1) / uint(wallGetPageSize)
+	for r-l > 1 {
+		m := (l + r) / 2
+		w0Result = client.getWallPosts(params, "offset", fmt.Sprint(m*uint(wallGetPageSize)))
+		if w0Result.IsErr() || w0Result.Unwrap().Response.Count == 0 {
+			return f.None[uint]()
+		}
+		w0 = w0Result.Unwrap()
+		if w0.Response.Items[0].Date >= postDate && w0.Response.Items[len(w0.Response.Items)-1].Date <= postDate {
+			for _, post := range w0.Response.Items {
+				if isRepostPredicate(post) {
+					return f.Some(post.ID)
+				}
+			}
+			l--
+			break
+		} else if w0.Response.Items[0].Date < postDate {
+			r = m
+		} else {
+			l = m
+		}
+	}
+	for l > 0 {
+		w0Result = client.getWallPosts(params, "offset", fmt.Sprint(l*uint(wallGetPageSize)))
+		if w0Result.IsErr() || w0Result.Unwrap().Response.Count == 0 {
+			return f.None[uint]()
+		}
+		// TODO: give user ability to control search limit
+		if w0.Response.Items[0].Date-postDate > 30000000 {
+			return f.None[uint]()
+		}
+		w0 = w0Result.Unwrap()
+		for _, post := range w0.Response.Items {
+			if isRepostPredicate(post) {
+				return f.Some(post.ID)
+			}
+		}
+		l--
+	}
+	return f.None[uint]()
 }
 
 func userInfoToUserID(info User) UserID {
