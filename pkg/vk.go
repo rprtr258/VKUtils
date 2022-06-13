@@ -191,10 +191,6 @@ func (xs *pagedImpl[A]) Next() f.Option[[]A] {
 		log.Println("ERROR WHILE GETTING PAGE: ", pageResult.UnwrapErr())
 		return f.None[[]A]()
 	}
-	// if xs.offset == 0 {
-	// 	log.Printf("GETTING PAGED DATA WITH %d ENTRIES\n", page.Total())
-	// }
-	// xs.total = f.Some(page.Total())
 	return pageResult.Unwrap()
 }
 

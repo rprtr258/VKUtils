@@ -43,10 +43,13 @@ func (pager *findRepostPager) NextPage() r.Result[f.Option[[]Post]] {
 	// })
 	return r.Map(
 		wallPosts,
-		func(ul WallPosts) f.Option[[]Post] {
+		func(page WallPosts) f.Option[[]Post] {
+			// if pager.offset == 0 {
+			// 	log.Printf("SEARCHING REPOST IN USER WITH %d ENTRIES\n", page.Response.Count)
+			// }
 			pager.offset += uint(wallGetPageSize)
-			pager.total = f.Some(ul.Response.Count)
-			return f.Some(ul.Response.Items)
+			pager.total = f.Some(page.Response.Count)
+			return f.Some(page.Response.Items)
 		},
 	)
 }
