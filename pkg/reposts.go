@@ -2,6 +2,7 @@ package vkutils
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 
 	f "github.com/rprtr258/goflow/fun"
@@ -31,16 +32,20 @@ func (pager *findRepostPager) NextPage() r.Result[f.Option[[]Post]] {
 	}
 	// log.Println("GET USER LIST", xs.offset, xs.total)
 	wallPosts := pager.client.getWallPosts(pager.params, "offset", fmt.Sprint(pager.offset))
-	// onePageOfPosts = TryRecover(onePageOfPosts, func(err error) IO[WallPosts] {
-	// 	errMsg := err.Error()
-	// 	// TODO: change to error structs
-	// 	if errMsg == "Error(15) Access denied: user hid his wall from accessing from outside" ||
-	// 		errMsg == "Error(18) User was deleted or banned" ||
-	// 		errMsg == "Error(30) This profile is private" {
-	// 		return []Post{}
-	// 	}
-	// 	return Fail[Repost](err)
-	// })
+	wallPosts = r.TryRecover(wallPosts, func(err error) r.Result[WallPosts] {
+		// TODO: change to error structs
+		if errMsg, ok := err.(ApiCallError); ok {
+			switch errMsg.vkError.Code {
+			case accessDenied, userWasDeletedOrBanned, profileIsPrivate:
+				return r.Success(WallPosts{Response: wallPostsResponse{
+					Count: 0,
+					Items: []Post{},
+				}})
+			}
+		}
+		log.Printf("Error getting user posts: %T(%[1]v)\n", err)
+		return r.Err[WallPosts](err)
+	})
 	return r.Map(
 		wallPosts,
 		func(page WallPosts) f.Option[[]Post] {

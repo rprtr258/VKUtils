@@ -24,10 +24,10 @@ const (
 
 // vk api error codes
 const (
-	tooManyRequests = 6
-	accessDenied    = 15
-	userBanned      = 18
-	userHidden      = 30
+	tooManyRequests        = 6
+	accessDenied           = 15
+	userWasDeletedOrBanned = 18
+	profileIsPrivate       = 30
 )
 
 // application constants
@@ -67,12 +67,14 @@ type Post struct {
 	} `json:"copy_history"`
 }
 
+type wallPostsResponse struct {
+	Count uint   `json:"count"`
+	Items []Post `json:"items"`
+}
+
 // WallPosts is a list of posts from user or group wall.
 type WallPosts struct {
-	Response struct {
-		Count uint   `json:"count"`
-		Items []Post `json:"items"`
-	} `json:"response"`
+	Response wallPostsResponse `json:"response"`
 }
 
 type WallGetByIDResponse struct {
@@ -107,12 +109,23 @@ type VkError struct {
 	Code    uint   `json:"error_code"`
 	Message string `json:"error_msg"`
 }
+
+func (err VkError) Error() string {
+	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
+}
+
 type VkErrorResponse struct {
 	Err VkError `json:"error"`
 }
 
-func (err *VkError) Error() string {
-	return fmt.Sprintf("Error(%d) %s", err.Code, err.Message)
+type ApiCallError struct {
+	vkError VkError
+	method  string
+	params  url.Values
+}
+
+func (err ApiCallError) Error() string {
+	return fmt.Sprintf("error while %s(%v): %v", err.method, err.params, err.vkError)
 }
 
 // NewVKClient creates new VKClient.
@@ -156,7 +169,6 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 	for timeLimitTries < apiRequestRetries {
 		resp, err = client.client.Do(req)
 		if err != nil {
-			// TODO: if user hid their wall
 			// TODO: fix, not working
 			return r.Err[[]byte](err)
 		}
@@ -180,15 +192,18 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 			// TODO: define behavior on error (retry or throw error) in loop
 			switch {
 			case v.Err.Code == tooManyRequests:
+				log.Printf("Too many requests on %s(%v)\n", method, params)
 				time.Sleep(waitTimeToRetry)
 				continue
-			case v.Err.Code == accessDenied || v.Err.Code == userBanned || v.Err.Code == userHidden:
-				return r.Success(body) // TODO: ???
 			default:
-				return r.Err[[]byte](fmt.Errorf("%s(%v) = Error(%d) %s", method, params, v.Err.Code, v.Err.Message))
+				return r.Err[[]byte](ApiCallError{
+					vkError: v.Err,
+					method:  method,
+					params:  params,
+				})
 			}
 		}
-		return r.Success(body) // TODO: ???
+		return r.Success(body)
 	}
 	return r.Err[[]byte](fmt.Errorf("%s(%v) = Timeout", method, params))
 }
@@ -200,7 +215,7 @@ type pagedImpl[A any] struct {
 func (xs *pagedImpl[A]) Next() f.Option[[]A] {
 	pageResult := xs.NextPage()
 	if pageResult.IsErr() {
-		log.Println("ERROR WHILE GETTING PAGE: ", pageResult.UnwrapErr())
+		log.Printf("ERROR WHILE GETTING PAGE in %T(%[1]v): %v\n", xs.Pager, pageResult.UnwrapErr())
 		return f.None[[]A]()
 	}
 	return pageResult.Unwrap()
