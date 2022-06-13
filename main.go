@@ -41,21 +41,21 @@ func parsePostsList(ls []string) r.Result[[]vk.PostID] {
 		}
 		res = append(res, vk.PostID{
 			OwnerID: ownerID,
-			PostID:  postID,
+			ID:      postID,
 		})
 	}
 	return r.Success(res)
 }
 
-func parsePostURL(url string) r.Result[f.Pair[vk.UserID, uint]] {
+func parsePostURL(url string) r.Result[vk.PostID] {
 	var (
 		ownerID vk.UserID
 		postID  uint
 	)
 	if _, err := fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID); err != nil {
-		return r.Err[f.Pair[vk.UserID, uint]](err)
+		return r.Err[vk.PostID](err)
 	}
-	return r.Success(f.NewPair(ownerID, postID))
+	return r.Success(vk.PostID{OwnerID: ownerID, ID: postID})
 }
 
 func parseGroupURL(groupURL string) r.Result[string] {
@@ -89,8 +89,8 @@ func main() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sharersStream := r.FlatMap(
 				parsePostURL(postURL),
-				func(postID f.Pair[vk.UserID, uint]) r.Result[s.Stream[vk.PostID]] {
-					return vk.GetReposters(&client, postID.Left, postID.Right)
+				func(postID vk.PostID) r.Result[s.Stream[vk.PostID]] {
+					return vk.GetReposters(&client, postID)
 				},
 			)
 			return r.Fold(
@@ -99,7 +99,7 @@ func main() {
 					s.ForEach(
 						s.Take(ss, 1), // TODO: remove
 						func(s vk.PostID) {
-							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.OwnerID, s.PostID)
+							fmt.Printf("FOUND REPOST: https://vk.com/wall%d_%d\n", s.OwnerID, s.ID)
 						},
 					)
 					return nil

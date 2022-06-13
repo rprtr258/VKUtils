@@ -57,7 +57,7 @@ type UserList struct {
 // PostID is pair of post author ID and post index.
 type PostID struct {
 	OwnerID UserID `json:"owner_id"`
-	PostID  uint   `json:"id"`
+	ID      uint   `json:"id"`
 }
 
 // Post is post on some user or group wall.
@@ -286,11 +286,11 @@ func (client *VKClient) getFriends(userID UserID) s.Stream[User] {
 	}), getFriendsLimit)
 }
 
-func (client *VKClient) getLikes(ownerID UserID, postID uint) s.Stream[User] {
+func (client *VKClient) getLikes(postID PostID) s.Stream[User] {
 	return client.getUserList("likes.getList", MakeUrlValues(map[string]any{
 		"type":     "post",
-		"owner_id": ownerID,
-		"item_id":  postID,
+		"owner_id": postID.OwnerID,
+		"item_id":  postID.ID,
 		"skip_own": "0",
 		"extended": "1",
 	}), getLikesListLimit)
@@ -309,16 +309,16 @@ func (client *VKClient) getWallPosts(params url.Values, params2 ...string) r.Res
 }
 
 // TODO: return time.Time
-func (client *VKClient) getPostTime(ownerID UserID, postID uint) r.Result[uint] {
+func (client *VKClient) getPostTime(postID PostID) r.Result[uint] {
 	body := client.apiRequest("wall.getById", MakeUrlValues(map[string]any{
-		"posts": fmt.Sprintf("%d_%d", ownerID, postID),
+		"posts": fmt.Sprintf("%d_%d", postID.OwnerID, postID.ID),
 	}))
 	userList := r.FlatMap(body, jsonUnmarshal[WallGetByIDResponse])
 	return r.FlatMap(
 		userList,
 		func(v WallGetByIDResponse) r.Result[uint] {
 			if len(v.Response) != 1 {
-				return r.Err[uint](postHiddenError{ownerID, postID})
+				return r.Err[uint](postHiddenError{postID.OwnerID, postID.ID})
 			}
 			return r.Success(v.Response[0].Date)
 		},

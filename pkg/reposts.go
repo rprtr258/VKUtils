@@ -73,7 +73,7 @@ func findRepostImpl(client *VKClient, ownerID UserID) s.Stream[Post] {
 }
 
 // Returns either found (or not found) repost's post id
-func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
+func findRepost(client *VKClient, userID UserID, postID PostID, postDate uint) f.Option[uint] {
 	allPosts := findRepostImpl(client, userID)
 	pinnedPostMaybe := s.Head(allPosts)
 	if pinnedPostMaybe.IsNone() {
@@ -82,7 +82,7 @@ func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
 	pinnedPost := pinnedPostMaybe.Unwrap()
 	isRepostPredicate := func(post Post) bool {
 		copyHistory := post.CopyHistory
-		return len(copyHistory) != 0 && copyHistory[0].PostID == origPost.ID && copyHistory[0].OwnerID == origPost.Owner
+		return len(copyHistory) != 0 && copyHistory[0].ID == postID.ID && copyHistory[0].OwnerID == postID.OwnerID
 	}
 	if isRepostPredicate(pinnedPost) {
 		return f.Some(pinnedPost.ID)
@@ -90,7 +90,7 @@ func findRepost(client *VKClient, userID UserID, origPost Post) f.Option[uint] {
 	remainingPosts := s.TakeWhile(
 		allPosts,
 		func(w Post) bool {
-			return w.Date >= origPost.Date
+			return w.Date >= postDate
 		},
 	)
 	repostMaybe := s.Find(remainingPosts, isRepostPredicate)
@@ -101,29 +101,29 @@ func userInfoToUserID(info User) UserID {
 	return info.ID
 }
 
-func getPotentialUserIDs(client *VKClient, ownerID UserID, postID uint) s.Stream[UserID] {
+func getPotentialUserIDs(client *VKClient, postID PostID) s.Stream[UserID] {
 	// TODO: add commenters?
 
 	// scan likers
-	likers := s.Map(client.getLikes(ownerID, postID), userInfoToUserID)
+	likers := s.Map(client.getLikes(postID), userInfoToUserID)
 
 	// scan group members/friends of post owner
 	var potentialUserIDs s.Stream[UserID]
-	if ownerID < 0 { // owner is group
-		potentialUserIDs = s.Map(client.getGroupMembers(ownerID), userInfoToUserID)
+	if postID.OwnerID < 0 { // owner is group
+		potentialUserIDs = s.Map(client.getGroupMembers(postID.OwnerID), userInfoToUserID)
 	} else { // owner is user
-		potentialUserIDs = s.Map(client.getFriends(ownerID), userInfoToUserID)
+		potentialUserIDs = s.Map(client.getFriends(postID.OwnerID), userInfoToUserID)
 	}
 
 	return s.Chain(likers, potentialUserIDs)
 }
 
-func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stream[PostID] {
+func getCheckedIDs(client *VKClient, postID PostID, postDate uint, userIDs s.Stream[UserID]) s.Stream[PostID] {
 	tasks := s.MapFilter(
 		userIDs,
 		func(userID UserID) f.Option[f.Task[PostID]] {
 			return f.Map(
-				findRepost(client, userID, post),
+				findRepost(client, userID, postID, postDate),
 				f.ToTaskFactory(func(postID uint) PostID {
 					return PostID{userID, postID}
 				}),
@@ -133,17 +133,13 @@ func getCheckedIDs(client *VKClient, post Post, userIDs s.Stream[UserID]) s.Stre
 	return s.Parallel(userCheckRepostsThreads, tasks)
 }
 
-func GetReposters(client *VKClient, ownerID UserID, postID uint) r.Result[s.Stream[PostID]] {
+func GetReposters(client *VKClient, postID PostID) r.Result[s.Stream[PostID]] {
 	// TODO: separate modification of post and creation of result
 	return r.Map(
-		client.getPostTime(ownerID, postID),
+		client.getPostTime(postID),
 		func(postDate uint) s.Stream[PostID] {
-			uniqueIDs := s.Unique(getPotentialUserIDs(client, ownerID, postID))
-			return getCheckedIDs(client, Post{
-				Owner: ownerID,
-				ID:    postID,
-				Date:  postDate,
-			}, uniqueIDs)
+			uniqueIDs := s.Unique(getPotentialUserIDs(client, postID))
+			return getCheckedIDs(client, postID, postDate, uniqueIDs)
 		},
 	)
 }
