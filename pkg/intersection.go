@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	f "github.com/rprtr258/goflow/fun"
+	"github.com/rprtr258/goflow/slice"
 	s "github.com/rprtr258/goflow/stream"
 )
 
@@ -31,7 +32,7 @@ func MembershipCount(client *VKClient, include UserSets) []f.Pair[UserInfo, int]
 		s.Map(s.FromSlice(include.Likers), func(postID PostID) s.Stream[UserInfo] { return client.getLikes(postID.OwnerID, postID.PostID) }),
 	)
 	mp := s.Reduce(f.NewEmptyCounter[UserInfo](), f.CounterPlus[UserInfo], s.Map(chans, s.CollectCounter[UserInfo]))
-	res := f.FromMap(mp)
+	res := slice.FromMap(mp)
 	sort.Slice(res, func(i, j int) bool { return res[i].Right > res[j].Right })
 	return res
 }

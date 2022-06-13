@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/url"
 
-	f "github.com/rprtr258/goflow/fun"
 	r "github.com/rprtr258/goflow/result"
+	"github.com/rprtr258/goflow/slice"
 	s "github.com/rprtr258/goflow/stream"
 )
 
@@ -55,7 +55,8 @@ func GetReversedPosts(client *VKClient, groupName string) r.Result[s.Stream[Post
 				},
 				jsonUnmarshal[W],
 				func(w W) r.Result[s.Stream[Post]] {
-					return r.Success(s.FromSlice(f.ReverseSlice(w.Response.Items)))
+					slice.ReverseInplace(w.Response.Items)
+					return r.Success(s.FromSlice(w.Response.Items))
 				},
 			)
 		},
