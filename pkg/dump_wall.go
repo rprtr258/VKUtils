@@ -11,7 +11,7 @@ import (
 )
 
 type postsPager struct {
-	client *VKClient
+	client VKClient
 	offset uint
 	total  f.Option[uint]
 	params url.Values
@@ -48,7 +48,7 @@ func (pager *postsPager) NextPage() r.Result[f.Option[[]Post]] {
 }
 
 // GetPosts gets posts stream from group.
-func GetPosts(client *VKClient, groupName string) r.Result[s.Stream[Post]] {
+func GetPosts(client VKClient, groupName string) r.Result[s.Stream[Post]] {
 	return r.Map(
 		client.getGroupID(groupName),
 		func(groupID UserID) s.Stream[Post] {

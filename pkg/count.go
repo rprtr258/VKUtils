@@ -17,7 +17,7 @@ type UserSets struct {
 	Commenters   []PostID
 }
 
-func MembershipCount(client *VKClient, include UserSets) []f.Pair[User, int] {
+func MembershipCount(client VKClient, include UserSets) []f.Pair[User, int] {
 	// TODO: parallelize
 	chans := s.Chain(
 		s.Map(s.FromSlice(include.Friends), client.getFriends),

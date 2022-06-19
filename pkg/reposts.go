@@ -17,7 +17,7 @@ const (
 )
 
 // Returns either found (or not found) repost's post id
-func findRepost(client *VKClient, userID UserID, postID PostID, postDate uint) f.Option[uint] {
+func findRepost(client VKClient, userID UserID, postID PostID, postDate uint) f.Option[uint] {
 	params := MakeUrlValues(map[string]any{
 		"owner_id": userID,
 		"count":    wallGetPageSize,
@@ -93,7 +93,7 @@ func userInfoToUserID(info User) UserID {
 	return info.ID
 }
 
-func getPotentialUserIDs(client *VKClient, postID PostID) s.Stream[UserID] {
+func getPotentialUserIDs(client VKClient, postID PostID) s.Stream[UserID] {
 	// scan commenters
 	commenters := s.Map(client.GetComments(postID), userInfoToUserID)
 
@@ -111,7 +111,7 @@ func getPotentialUserIDs(client *VKClient, postID PostID) s.Stream[UserID] {
 	return s.Chain(commenters, likers, potentialUserIDs)
 }
 
-func getCheckedIDs(client *VKClient, postID PostID, postDate uint, userIDs s.Stream[UserID]) s.Stream[PostID] {
+func getCheckedIDs(client VKClient, postID PostID, postDate uint, userIDs s.Stream[UserID]) s.Stream[PostID] {
 	tasks := s.MapFilter(
 		userIDs,
 		func(userID UserID) f.Option[f.Task[PostID]] {
@@ -126,7 +126,7 @@ func getCheckedIDs(client *VKClient, postID PostID, postDate uint, userIDs s.Str
 	return s.Parallel(userCheckRepostsThreads, tasks)
 }
 
-func GetReposters(client *VKClient, postID PostID) r.Result[s.Stream[PostID]] {
+func GetReposters(client VKClient, postID PostID) r.Result[s.Stream[PostID]] {
 	return r.Map(
 		client.getPostTime(postID),
 		func(postDate uint) s.Stream[PostID] {

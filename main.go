@@ -1,7 +1,13 @@
 package main
 
-import "github.com/rprtr258/vk-utils/cmd"
+import (
+	"log"
+
+	"github.com/rprtr258/vk-utils/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	if err := cmd.Execute(); err != nil {
+		log.Fatal(err)
+	}
 }

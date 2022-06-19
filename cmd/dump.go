@@ -10,22 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(newDumpCommand(client))
-}
-
-func parseGroupURL(groupURL string) r.Result[string] {
-	var groupName string
-	if _, err := fmt.Sscanf(groupURL, "https://vk.com/%s", &groupName); err != nil {
-		return r.Err[string](err)
-	}
-	return r.Success(groupName)
-}
-
-func newDumpCommand(client *vk.VKClient) *cobra.Command {
+var (
+	groupURL string
 	// TODO: dump groups/profiles posts into database (own format?)
-	var groupURL string
-	dumpCmd := cobra.Command{
+	dumpCmd = cobra.Command{
 		Use:   "dumpwall",
 		Short: "List group posts in reversed order (from old to new).",
 		Args:  cobra.MaximumNArgs(0),
@@ -55,7 +43,19 @@ func newDumpCommand(client *vk.VKClient) *cobra.Command {
 		},
 		Example: "vkutils revposts https://vk.com/abobus_official",
 	}
+)
+
+func init() {
 	dumpCmd.Flags().StringVarP(&groupURL, "url", "u", "", "url of vk group")
 	dumpCmd.MarkFlagRequired("url")
-	return &dumpCmd
+
+	rootCmd.AddCommand(&dumpCmd)
+}
+
+func parseGroupURL(groupURL string) r.Result[string] {
+	var groupName string
+	if _, err := fmt.Sscanf(groupURL, "https://vk.com/%s", &groupName); err != nil {
+		return r.Err[string](err)
+	}
+	return r.Success(groupName)
 }
