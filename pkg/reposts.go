@@ -108,7 +108,7 @@ func getPotentialUserIDs(client VKClient, postID PostID) s.Stream[UserID] {
 		potentialUserIDs = s.Map(client.getFriends(postID.OwnerID), userInfoToUserID)
 	}
 
-	return s.Chain(commenters, likers, potentialUserIDs)
+	return s.Gather([]s.Stream[UserID]{commenters, likers, potentialUserIDs})
 }
 
 func getCheckedIDs(client VKClient, postID PostID, postDate uint, userIDs s.Stream[UserID]) s.Stream[PostID] {
