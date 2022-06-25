@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	r "github.com/rprtr258/goflow/result"
-	s "github.com/rprtr258/goflow/stream"
+	r "github.com/rprtr258/go-flow/result"
+	s "github.com/rprtr258/go-flow/stream"
 	vk "github.com/rprtr258/vk-utils/pkg"
 	"github.com/spf13/cobra"
 )
@@ -19,8 +19,7 @@ var (
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			groupName := parseGroupURL(groupURL)
-			r.FoldConsume(
-				vk.GetPosts(client, groupName.Unwrap()),
+			vk.GetPosts(client, groupName.Unwrap()).Consume(
 				func(x s.Stream[vk.Post]) {
 					s.ForEach(
 						x,

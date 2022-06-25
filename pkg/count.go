@@ -3,9 +3,9 @@ package vkutils
 import (
 	"sort"
 
-	f "github.com/rprtr258/goflow/fun"
-	"github.com/rprtr258/goflow/slice"
-	s "github.com/rprtr258/goflow/stream"
+	f "github.com/rprtr258/go-flow/fun"
+	"github.com/rprtr258/go-flow/slice"
+	s "github.com/rprtr258/go-flow/stream"
 )
 
 type UserSets struct {

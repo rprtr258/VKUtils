@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log"
 
-	f "github.com/rprtr258/goflow/fun"
-	r "github.com/rprtr258/goflow/result"
-	s "github.com/rprtr258/goflow/stream"
+	f "github.com/rprtr258/go-flow/fun"
+	r "github.com/rprtr258/go-flow/result"
+	s "github.com/rprtr258/go-flow/stream"
 )
 
 type PageSize uint
@@ -112,18 +112,20 @@ func getPotentialUserIDs(client VKClient, postID PostID) s.Stream[UserID] {
 }
 
 func getCheckedIDs(client VKClient, postID PostID, postDate uint, userIDs s.Stream[UserID]) s.Stream[PostID] {
-	tasks := s.MapFilter(
-		userIDs,
-		func(userID UserID) f.Option[f.Task[PostID]] {
-			return f.Map(
-				findRepost(client, userID, postID, postDate),
-				f.ToTaskFactory(func(postID uint) PostID {
-					return PostID{userID, postID}
-				}),
-			)
+	findRepost := func(userID UserID) f.Option[PostID] {
+		return f.Map(
+			findRepost(client, userID, postID, postDate),
+			func(postID uint) PostID {
+				return PostID{userID, postID}
+			},
+		)
+	}
+	return s.Gather(s.CollectToSlice(s.Map(
+		s.FromSlice(s.Scatter(userIDs, userCheckRepostsThreads)),
+		func(userIDs s.Stream[UserID]) s.Stream[PostID] {
+			return s.MapFilter(userIDs, findRepost)
 		},
-	)
-	return s.Parallel(userCheckRepostsThreads, tasks)
+	)))
 }
 
 func GetReposters(client VKClient, postID PostID) r.Result[s.Stream[PostID]] {

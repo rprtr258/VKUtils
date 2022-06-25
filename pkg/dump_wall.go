@@ -5,9 +5,9 @@ import (
 	"log"
 	"net/url"
 
-	f "github.com/rprtr258/goflow/fun"
-	r "github.com/rprtr258/goflow/result"
-	s "github.com/rprtr258/goflow/stream"
+	f "github.com/rprtr258/go-flow/fun"
+	r "github.com/rprtr258/go-flow/result"
+	s "github.com/rprtr258/go-flow/stream"
 )
 
 type postsPager struct {
