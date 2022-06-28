@@ -16,12 +16,12 @@ import (
 
 // vk api constants
 const (
-	// getUserListThreads     = 10
 	groupsGetMembersPageSize  = PageSize(1000)
 	getFriendsPageSize        = PageSize(5000)
 	wallGetCommentsPageSize   = PageSize(100)
 	getLikesPageSize          = PageSize(1000)
 	usersGetFollowersPageSize = PageSize(1000)
+	apiUrl                    = "https://api.vk.com/method/"
 )
 
 // vk api error codes
@@ -179,18 +179,20 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 	for i := 0; i < len(params2); i += 2 {
 		params.Set(params2[i], params2[i+1])
 	}
-	url := fmt.Sprintf("https://api.vk.com/method/%s", method)
-	req, err := http.NewRequest("GET", url, nil)
+	methodUrl := fmt.Sprintf("%s%s", apiUrl, method)
+	req, err := http.NewRequest(http.MethodGet, methodUrl, nil)
 	if err != nil {
 		return r.Err[[]byte](err)
 	}
-	reqParams := req.URL.Query()
+
+	reqParams := make(url.Values)
 	reqParams.Add("v", apiVersion)
 	reqParams.Add("access_token", client.accessToken)
 	for k, v := range params {
 		reqParams.Add(k, v[0])
 	}
 	req.URL.RawQuery = reqParams.Encode()
+
 	timeLimitTries := 0
 	var resp *http.Response
 	for timeLimitTries < apiRequestRetries {
@@ -267,7 +269,6 @@ func (pager *userListPager) NextPage() r.Result[f.Option[[]User]] {
 	if pager.total.IsSome() && pager.offset >= pager.total.Unwrap() {
 		return r.Success(f.None[[]User]())
 	}
-	// log.Println("GET USER LIST", xs.offset, xs.total)
 	userList := r.FlatMap(
 		pager.client.apiRequest(pager.method, pager.urlParams, "offset", fmt.Sprint(pager.offset)),
 		jsonUnmarshal[UserList],
