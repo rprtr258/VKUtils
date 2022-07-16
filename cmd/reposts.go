@@ -11,13 +11,15 @@ import (
 )
 
 var (
-	postURL    string
-	repostsCmd = cobra.Command{
+	postURL           string
+	repostSearchLimit uint
+	repostsCmd        = cobra.Command{
 		Use:   "reposts -u",
 		Short: "Find reposters.",
 		Long:  `Find reposters from commenters, group members, likers. Won't find all of reposters.`,
 		Args:  cobra.MaximumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			client.RepostSearchLimit = repostSearchLimit
 			sharersStream := r.FlatMap(
 				parsePostURL(postURL),
 				func(postID vk.PostID) r.Result[s.Stream[vk.PostID]] {
@@ -44,7 +46,7 @@ var (
 
 func init() {
 	repostsCmd.Flags().StringVarP(&postURL, "url", "u", "", "url of vk post")
-
+	repostsCmd.Flags().UintVarP(&repostSearchLimit, "limit", "i", 30000000, "max diff between post time and repost time to look")
 	rootCmd.AddCommand(&repostsCmd)
 }
 

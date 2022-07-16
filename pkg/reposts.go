@@ -74,8 +74,7 @@ func findRepost(client VKClient, userID UserID, postID PostID, postDate uint) f.
 		if w0Result.IsErr() || w0Result.Unwrap().Response.Count == 0 {
 			return f.None[uint]()
 		}
-		// TODO: give user ability to control search limit
-		if w0.Response.Items[0].Date-postDate > 30000000 {
+		if w0.Response.Items[0].Date-postDate > client.RepostSearchLimit {
 			return f.None[uint]()
 		}
 		w0 = w0Result.Unwrap()

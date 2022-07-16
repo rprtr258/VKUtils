@@ -118,9 +118,10 @@ type GetCommentsResponse struct {
 
 // VKClient is a client to VK api.
 type VKClient struct {
-	accessToken string
-	client      http.Client
-	logAPICalls bool
+	accessToken       string
+	client            http.Client
+	logAPICalls       bool
+	RepostSearchLimit uint
 }
 
 type postHiddenError struct {
