@@ -12,8 +12,7 @@ import (
 
 var (
 	groupURL string
-	// TODO: dump groups/profiles posts into database (own format?)
-	dumpCmd = cobra.Command{
+	dumpCmd  = cobra.Command{
 		Use:   "dumpwall",
 		Short: "List group posts in reversed order (from old to new).",
 		Args:  cobra.MaximumNArgs(0),
