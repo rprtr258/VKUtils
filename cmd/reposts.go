@@ -7,21 +7,22 @@ import (
 	r "github.com/rprtr258/go-flow/result"
 	s "github.com/rprtr258/go-flow/stream"
 	vk "github.com/rprtr258/vk-utils/pkg"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli/v2"
 )
 
 var (
-	postURL           string
+	_postURL          string
 	repostSearchLimit uint
-	repostsCmd        = cobra.Command{
-		Use:   "reposts -u",
-		Short: "Find reposters.",
-		Long:  `Find reposters from commenters, group members, likers. Won't find all of reposters.`,
-		Args:  cobra.MaximumNArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
+	repostsCmd        = &cli.Command{
+		Name: "reposts",
+		Usage: `Find reposters from commenters, group members, likers. Won't find all of reposters.
+Example:
+	vkutils reposts -u https://vk.com/wall-2158488_651604
+`,
+		Action: func(*cli.Context) error {
 			client.RepostSearchLimit = repostSearchLimit
 			sharersStream := r.FlatMap(
-				parsePostURL(postURL),
+				parsePostURL(_postURL),
 				func(postID vk.PostID) r.Result[s.Stream[vk.PostID]] {
 					return vk.GetReposters(client, postID)
 				},
@@ -40,23 +41,29 @@ var (
 				f.Identity[error],
 			)
 		},
-		Example: "vkutils reposts -u https://vk.com/wall-2158488_651604",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "url",
+				Aliases:     []string{"u"},
+				Required:    true,
+				Usage:       "url of vk post",
+				Destination: &_postURL,
+			},
+			&cli.UintFlag{
+				Name:        "limit",
+				Aliases:     []string{"i"},
+				Value:       30000000,
+				Usage:       "max diff between post time and repost time to look",
+				Destination: &repostSearchLimit,
+			},
+		},
 	}
 )
 
-func init() {
-	repostsCmd.Flags().StringVarP(&postURL, "url", "u", "", "url of vk post")
-	repostsCmd.Flags().UintVarP(&repostSearchLimit, "limit", "i", 30000000, "max diff between post time and repost time to look")
-	rootCmd.AddCommand(&repostsCmd)
-}
-
 func parsePostURL(url string) r.Result[vk.PostID] {
-	var (
-		ownerID vk.UserID
-		postID  uint
-	)
-	if _, err := fmt.Sscanf(url, "https://vk.com/wall%d_%d", &ownerID, &postID); err != nil {
+	var postID vk.PostID
+	if _, err := fmt.Sscanf(url, "https://vk.com/wall%d_%d", &postID.OwnerID, &postID.ID); err != nil {
 		return r.Err[vk.PostID](err)
 	}
-	return r.Success(vk.PostID{OwnerID: ownerID, ID: postID})
+	return r.Success(postID)
 }

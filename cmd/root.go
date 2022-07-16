@@ -1,40 +1,50 @@
 package cmd
 
 import (
-	"errors"
 	"log"
-	"os"
 	"time"
 
 	vk "github.com/rprtr258/vk-utils/pkg"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli/v2"
 )
 
 var (
-	client  vk.VKClient
-	rootCmd = cobra.Command{
-		Use:   "vkutils",
-		Short: "VK data extraction tools. Need VK_ACCESS_TOKEN env var to work with VK api.",
+	client   vk.VKClient
+	_verbose bool
+	_vkToken string
+	start    time.Time
+	RootCmd  = &cli.App{
+		Name:  "vkutils",
+		Usage: "VK data extraction tools. Need VK_ACCESS_TOKEN env var to work with VK api.",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:        "verbose",
+				Aliases:     []string{"v"},
+				Value:       false,
+				Usage:       "log api calls",
+				Destination: &_verbose,
+			},
+			&cli.StringFlag{
+				Name:        "token",
+				Usage:       "VK api token",
+				Required:    true,
+				EnvVars:     []string{"VK_ACCESS_TOKEN"},
+				Destination: &_vkToken,
+			},
+		},
+		Commands: []*cli.Command{
+			dumpCmd,
+			repostsCmd,
+			countCmd,
+		},
+		Before: func(ctx *cli.Context) error {
+			client = vk.NewVKClient(_vkToken, _verbose)
+			start = time.Now()
+			return nil
+		},
+		After: func(ctx *cli.Context) error {
+			log.Printf("Time elapsed %v", time.Since(start))
+			return nil
+		},
 	}
 )
-
-func init() {
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "log api calls")
-}
-
-func Execute() error {
-	if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
-		return errors.New("VK_ACCESS_TOKEN was not found in env vars")
-	}
-	verbose, err := rootCmd.PersistentFlags().GetBool("verbose")
-	if err != nil {
-		return err
-	}
-	client = vk.NewVKClient(os.Getenv("VK_ACCESS_TOKEN"), verbose)
-	start := time.Now()
-	if err := rootCmd.Execute(); err != nil {
-		return err
-	}
-	log.Printf("Time elapsed %v", time.Since(start))
-	return nil
-}
