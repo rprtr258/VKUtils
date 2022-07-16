@@ -157,10 +157,11 @@ func (err ApiCallError) Error() string {
 }
 
 // NewVKClient creates new VKClient.
-func NewVKClient(accessToken string) VKClient {
+func NewVKClient(accessToken string, verbose bool) VKClient {
 	return VKClient{
 		accessToken: accessToken,
 		client:      *http.DefaultClient,
+		logAPICalls: verbose,
 	}
 }
 
@@ -223,7 +224,10 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 		if v.Err.Code != 0 {
 			switch {
 			case v.Err.Code == tooManyRequests:
-				log.Printf("TOO MANY REQUESTS: method=%s params=%+v\n", method, params)
+				client.mylog("TOO MANY REQUESTS", map[string]any{
+					"method": method,
+					"params": params,
+				})
 				time.Sleep(waitTimeToRetry)
 				continue
 			default:

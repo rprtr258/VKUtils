@@ -18,11 +18,19 @@ var (
 	}
 )
 
+func init() {
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "log api calls")
+}
+
 func Execute() error {
 	if _, presented := os.LookupEnv("VK_ACCESS_TOKEN"); !presented {
 		return errors.New("VK_ACCESS_TOKEN was not found in env vars")
 	}
-	client = vk.NewVKClient(os.Getenv("VK_ACCESS_TOKEN"))
+	verbose, err := rootCmd.PersistentFlags().GetBool("verbose")
+	if err != nil {
+		return err
+	}
+	client = vk.NewVKClient(os.Getenv("VK_ACCESS_TOKEN"), verbose)
 	start := time.Now()
 	if err := rootCmd.Execute(); err != nil {
 		return err
