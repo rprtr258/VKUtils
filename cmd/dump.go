@@ -7,17 +7,28 @@ import (
 	r "github.com/rprtr258/go-flow/result"
 	s "github.com/rprtr258/go-flow/stream"
 	vk "github.com/rprtr258/vk-utils/pkg"
-	"github.com/spf13/cobra"
+	"github.com/urfave/cli/v2"
 )
 
 var (
-	groupURL string
-	dumpCmd  = cobra.Command{
-		Use:   "dumpwall",
-		Short: "List group posts in reversed order (from old to new).",
-		Args:  cobra.MaximumNArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			groupName := parseGroupURL(groupURL)
+	_groupURL string
+	dumpCmd   = &cli.Command{
+		Name: "dumpwall",
+		Usage: `List group posts in reversed order (from old to new).
+Example:
+	vkutils revposts https://vk.com/abobus_official
+`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "url",
+				Aliases:     []string{"u"},
+				Required:    true,
+				Usage:       "url of vk group",
+				Destination: &_groupURL,
+			},
+		},
+		Action: func(*cli.Context) error {
+			groupName := parseGroupURL(_groupURL)
 			vk.GetPosts(client, groupName.Unwrap()).Consume(
 				func(x s.Stream[vk.Post]) {
 					s.ForEach(
@@ -39,16 +50,8 @@ var (
 			)
 			return nil
 		},
-		Example: "vkutils revposts https://vk.com/abobus_official",
 	}
 )
-
-func init() {
-	dumpCmd.Flags().StringVarP(&groupURL, "url", "u", "", "url of vk group")
-	dumpCmd.MarkFlagRequired("url")
-
-	rootCmd.AddCommand(&dumpCmd)
-}
 
 func parseGroupURL(groupURL string) r.Result[string] {
 	var groupName string
