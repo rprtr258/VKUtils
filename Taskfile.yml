@@ -3,11 +3,13 @@ version: '3'
 dotenv: [".env"]
 
 tasks:
-  run:
-    dir: src
-    cmds:
-      - go run *.go
-  bench:
-    dir: tests
-    cmds:
-      - go test -bench=.
+  lint:
+    golangci-lint run --exclude-use-default=false --disable-all --enable=revive
+  todo:
+    rg 'TODO' --glob '**/*.go'
+  reposts:
+    go run main.go reposts -u https://vk.com/wall-149859311_975
+  dumpwall:
+    go run main.go dumpwall -u https://vk.com/tsgnmdmvn
+  count:
+    go run main.go count --friends 168715495 --groups -187839235
