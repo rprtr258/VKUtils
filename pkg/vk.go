@@ -120,6 +120,7 @@ type GetCommentsResponse struct {
 type VKClient struct {
 	accessToken string
 	client      http.Client
+	logAPICalls bool
 }
 
 type postHiddenError struct {
@@ -174,7 +175,6 @@ func jsonUnmarshal[J any](body []byte) r.Result[J] {
 	})
 }
 
-// TODO: print request, response, timing
 func (client *VKClient) apiRequest(method string, params url.Values, params2 ...string) r.Result[[]byte] {
 	for i := 0; i < len(params2); i += 2 {
 		params.Set(params2[i], params2[i+1])
@@ -209,7 +209,11 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 		if err != nil {
 			return r.Err[[]byte](err)
 		}
-		// log.Println("ON ", method, " ", params, " GOT:\n", string(body))
+		client.mylog("VK API REQUEST", map[string]any{
+			"method":   method,
+			"params":   params,
+			"response": string(body),
+		})
 		// move out parsing response
 		errr := jsonUnmarshal[VkErrorResponse](body)
 		if errr.IsErr() {
@@ -219,7 +223,7 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 		if v.Err.Code != 0 {
 			switch {
 			case v.Err.Code == tooManyRequests:
-				log.Printf("Too many requests on %s(%v)\n", method, params)
+				log.Printf("TOO MANY REQUESTS: method=%s params=%+v\n", method, params)
 				time.Sleep(waitTimeToRetry)
 				continue
 			default:
@@ -403,7 +407,6 @@ func (client *VKClient) GetComments(postID PostID) s.Stream[User] {
 			}
 		},
 	)
-
 }
 
 func (client *VKClient) getWallPosts(params url.Values, params2 ...string) r.Result[WallPosts] {
@@ -444,4 +447,14 @@ func MakeUrlValues(kvs map[string]any) url.Values {
 		res.Set(k, fmt.Sprint(v))
 	}
 	return res
+}
+
+func (client *VKClient) mylog(message string, data map[string]any) {
+	if !client.logAPICalls {
+		return
+	}
+	log.Print(message, ": ")
+	for k, v := range data {
+		log.Printf("%s=%+v ", k, v)
+	}
 }
