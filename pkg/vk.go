@@ -21,7 +21,7 @@ const (
 	wallGetCommentsPageSize   = PageSize(100)
 	getLikesPageSize          = PageSize(1000)
 	usersGetFollowersPageSize = PageSize(1000)
-	apiUrl                    = "https://api.vk.com/method/"
+	apiURL                    = "https://api.vk.com/method/"
 )
 
 // vk api error codes
@@ -181,8 +181,8 @@ func (client *VKClient) apiRequest(method string, params url.Values, params2 ...
 	for i := 0; i < len(params2); i += 2 {
 		params.Set(params2[i], params2[i+1])
 	}
-	methodUrl := fmt.Sprintf("%s%s", apiUrl, method)
-	req, err := http.NewRequest(http.MethodGet, methodUrl, nil)
+	methodURL := fmt.Sprintf("%s%s", apiURL, method)
+	req, err := http.NewRequest(http.MethodGet, methodURL, nil)
 	if err != nil {
 		return r.Err[[]byte](err)
 	}
